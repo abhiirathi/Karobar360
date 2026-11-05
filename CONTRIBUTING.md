@@ -31,3 +31,5 @@ Every change goes through a branch and a pull request.
 - New data fields must be optional. Never rename or remove a field without a migration:
   customers already have data saved in the old shape.
 - Unfinished work can be merged switched off (module settings), instead of keeping a branch alive for weeks.
+
+Setup checked by Vedant. Follow CLAUDE.md.
