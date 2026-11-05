@@ -430,6 +430,26 @@ export interface StoneSettings {
   };
 }
 
+/** Attendance for one day: present, half day, absent. */
+export type Mark = "P" | "H" | "A";
+
+/** A worker on the labour list. The wage is hidden from people who may not see costs. */
+export interface Worker {
+  id: string;
+  name: string;
+  phone: string;
+  trade: string; // gang saw operator, polisher, helper…
+  site: string; // where they work: unit, mine, depot
+  wageType: "day" | "month";
+  rate: number; // ₹ per day, or ₹ per month
+  joinedOn: string;
+  active: boolean;
+  notes: string;
+  firmId?: string;
+  /** Attendance by date (YYYY-MM-DD). */
+  att?: Record<string, Mark>;
+}
+
 export interface StoneDB {
   v: 1;
   settings: StoneSettings;
@@ -444,6 +464,8 @@ export interface StoneDB {
   damages: DamageEvent[];
   shipments: Shipment[];
   sales: Sale[];
+  /** Labour list with daily attendance. Added Nov 2026; missing in older data. */
+  labour?: Worker[];
   jobwork?: JobOrder[];
 }
 
