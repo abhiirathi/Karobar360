@@ -534,52 +534,56 @@ function MoveForm({ lot, onSave, onClose }: { lot: SlabLot; onSave: (freight: nu
 
 type Stage = { key: Tab; title: string; count: number; unit: string; sub: string; todo?: { text: string; go: Tab } };
 
-/** The unit as a chain: each stage feeds the next, and each card says what is waiting to be done. */
+/** The unit as a chain: small connected steps, left to right, with a dot where something is waiting. */
 function ProcessChain({ tab, setTab, allowed, stages, links, filters, actions }: {
   tab: Tab; setTab: (t: Tab) => void; allowed: Tab[]; stages: Stage[]; links: string[];
   filters: { key: Tab; label: string; count: number; warn?: boolean }[]; actions: React.ReactNode;
 }) {
   const shown = stages.filter((s) => allowed.includes(s.key));
   const active = (k: Tab) => tab === k || (k === "slabs" && tab === "lots");
+  const cur = stages.find((s) => active(s.key));
   return (
     <div className="mt-8">
-      <ol className="flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-0">
-        {shown.map((s, i) => {
-          const on = active(s.key);
-          const idx = stages.findIndex((x) => x.key === s.key);
-          return (
-            <li key={s.key} className="flex flex-col lg:flex-1 lg:flex-row lg:items-stretch">
-              <button type="button" onClick={() => setTab(s.key)} aria-current={on ? "step" : undefined}
-                className={`focusable group relative flex-1 rounded-2xl p-4 text-left transition-all ${on ? "bg-accent text-accent-ink shadow-lg shadow-black/5" : "bg-surface hover:-translate-y-0.5 hover:shadow-md"}`}>
-                <div className="flex items-center gap-2">
-                  <span className={`num grid h-6 w-6 place-items-center rounded-full text-[0.75rem] font-semibold ${on ? "bg-accent-ink/20" : "bg-surface-2 text-ink-2"}`}>{idx + 1}</span>
-                  <span className="font-semibold">{s.title}</span>
-                </div>
-                <div className="mt-3 flex items-baseline gap-1.5"><span className="num text-[1.9rem] font-semibold leading-none tracking-tight">{n0(s.count)}</span><span className={`text-[0.84rem] ${on ? "opacity-80" : "text-ink-3"}`}>{s.unit}</span></div>
-                <div className={`mt-1 text-[0.8rem] ${on ? "opacity-80" : "text-ink-3"}`}>{s.sub}</div>
-                <div className={`mt-3 flex items-center gap-1.5 text-[0.8rem] font-medium ${s.todo ? (on ? "" : "text-warn") : on ? "opacity-80" : "text-accent"}`}>
-                  {s.todo ? <><span className={`h-2 w-2 rounded-full ${on ? "bg-accent-ink" : "bg-warn"} animate-pulse`} />{s.todo.text}</> : <><Check size={14} />All caught up</>}
-                </div>
-              </button>
-              {i < shown.length - 1 && (
-                <div className="flex items-center justify-center py-1 lg:w-24 lg:flex-col lg:py-0" aria-hidden>
-                  <span className="text-[0.72rem] font-medium uppercase tracking-wide text-ink-3 lg:mb-1">{links[idx]}</span>
-                  <ChevronRight size={20} className="ml-1 rotate-90 text-accent lg:ml-0 lg:rotate-0" />
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="text-[0.82rem] text-ink-3">Also show</span>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
+        <ol className="scroll-thin -mx-1 flex max-w-full items-center overflow-x-auto px-1 py-1" aria-label="Processing steps">
+          {shown.map((s, i) => {
+            const on = active(s.key);
+            const idx = stages.findIndex((x) => x.key === s.key);
+            return (
+              <li key={s.key} className="flex items-center">
+                <button type="button" onClick={() => setTab(s.key)} aria-current={on ? "step" : undefined} title={s.todo?.text ?? "All caught up"}
+                  className={`focusable relative inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full pl-1.5 pr-3.5 text-[0.88rem] font-medium transition-colors ${on ? "bg-accent text-accent-ink shadow-sm" : "bg-surface text-ink hover:bg-surface-2"}`}>
+                  <span className={`num grid h-6 w-6 place-items-center rounded-full text-[0.72rem] font-semibold ${on ? "bg-accent-ink/20" : "bg-surface-2 text-ink-2"}`}>{idx + 1}</span>
+                  {s.title}
+                  <span className={`num ${on ? "opacity-80" : "text-ink-3"}`}>{n0(s.count)}</span>
+                  {s.todo && <span className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-warn ring-2 ${on ? "ring-accent" : "ring-ground"}`} aria-label="Needs attention" />}
+                </button>
+                {i < shown.length - 1 && (
+                  <span className="relative mx-1.5 flex w-9 shrink-0 items-center sm:w-14" title={links[idx]} aria-hidden>
+                    <span className="flow-line h-[2px] flex-1 rounded-full" />
+                    <ChevronRight size={15} strokeWidth={2.5} className="-ml-1 shrink-0 text-accent" />
+                    <span className="sr-only">{links[idx]}</span>
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+        <span className="mx-1 hidden h-5 w-px bg-surface-3 sm:block" aria-hidden />
         {filters.filter((f) => allowed.includes(f.key)).map((f) => (
-          <button key={f.key} type="button" className="chip" data-on={tab === f.key} onClick={() => setTab(tab === f.key ? (f.key === "lots" ? "slabs" : "yard") : f.key)}>
+          <button key={f.key} type="button" className="chip !h-9" data-on={tab === f.key} onClick={() => setTab(tab === f.key ? (f.key === "lots" ? "slabs" : "yard") : f.key)}>
             {f.label}<span className={`num ml-1.5 ${f.warn && f.count ? "text-warn" : "opacity-70"}`}>{f.count}</span>
           </button>
         ))}
         <div className="ml-auto flex flex-wrap gap-2">{actions}</div>
       </div>
+      {cur && (
+        <p className="mt-2.5 flex flex-wrap items-center gap-x-2 text-[0.84rem] text-ink-3">
+          <span>{cur.sub}</span>
+          <span aria-hidden>·</span>
+          {cur.todo ? <span className="inline-flex items-center gap-1.5 font-medium text-warn"><span className="h-1.5 w-1.5 rounded-full bg-warn" />{cur.todo.text}</span> : <span className="inline-flex items-center gap-1 font-medium text-accent"><Check size={13} />All caught up</span>}
+        </p>
+      )}
     </div>
   );
 }
