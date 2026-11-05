@@ -1,0 +1,88 @@
+import type { Lang } from "./types";
+
+const HI: Record<string, string> = {
+  Overview: "सारांश",
+  "Ask Karobar360": "Karobar360 से पूछें",
+  Automations: "ऑटोमेशन",
+  Settings: "सेटिंग्स",
+  "Add a module": "नया मॉड्यूल जोड़ें",
+  "All sites": "सभी साइट",
+  Owner: "मालिक",
+  Accounts: "अकाउंट्स",
+  "Plant manager": "प्लांट मैनेजर",
+  "Needs attention": "ध्यान दें",
+  "What to do next": "आगे क्या करें",
+  Insights: "सुझाव",
+  "Business health": "व्यापार स्वास्थ्य",
+  "Search": "खोजें",
+  "Export CSV": "CSV निकालें",
+  "Import CSV": "CSV डालें",
+  Proposal: "प्रस्ताव",
+  Share: "शेयर करें",
+  "Revenue, last 12 months": "पिछले 12 महीनों की बिक्री",
+  "Monthly revenue vs target": "मासिक बिक्री बनाम लक्ष्य",
+  "Revenue, FY to date": "इस वित्त वर्ष की बिक्री",
+  "Orders last month": "पिछले महीने के ऑर्डर",
+  "Receivables outstanding": "बकाया वसूली",
+  "Days sales outstanding": "वसूली के दिन",
+  "Cash & bank balance": "नकद व बैंक बैलेंस",
+  "Gross margin": "सकल मार्जिन",
+  "Payables due": "देय भुगतान",
+  "MSME supplier dues past 45 days": "45 दिन से पुराने MSME बकाया",
+  "Stock value": "स्टॉक मूल्य",
+  "Items at or below reorder level": "रीऑर्डर स्तर पर आइटम",
+  "Days of inventory": "स्टॉक के दिन",
+  "Dead stock (180+ days)": "डेड स्टॉक (180+ दिन)",
+  "Purchases last month": "पिछले महीने की खरीद",
+  "Open purchase orders": "खुले खरीद ऑर्डर",
+  "Vendor on-time delivery": "सप्लायर समय पर डिलीवरी",
+  "Average lead time": "औसत लीड टाइम",
+  "Output, last 30 days": "पिछले 30 दिन का उत्पादन",
+  "Overall equipment effectiveness": "मशीन दक्षता (OEE)",
+  "Rejection rate": "रिजेक्शन दर",
+  "Machine downtime": "मशीन बंद समय",
+  "Dispatches last month": "पिछले महीने के डिस्पैच",
+  "On time, in full": "समय पर, पूरा माल",
+  "Freight as % of sales": "बिक्री का भाड़ा %",
+  "E-way bills expiring in 24h": "24 घंटे में खत्म ई-वे बिल",
+  Headcount: "कुल कर्मचारी",
+  "Present today": "आज उपस्थित",
+  "Overtime this month": "इस महीने ओवरटाइम",
+  "Attrition, annualised": "वार्षिक नौकरी छोड़ने की दर",
+  "Contract workers": "ठेका मजदूर",
+  "Net salary payout": "शुद्ध वेतन भुगतान",
+  "PF (employee + employer)": "पीएफ (कर्मचारी + नियोक्ता)",
+  "ESI (employee + employer)": "ईएसआई (कर्मचारी + नियोक्ता)",
+  "First-pass yield": "पहली बार में सही",
+  "Rejected last month": "पिछले महीने रिजेक्ट",
+  "Open customer complaints": "खुली ग्राहक शिकायतें",
+  "Cost of poor quality": "खराब गुणवत्ता की लागत",
+  "Compliance score": "अनुपालन स्कोर",
+  "Due in the next 15 days": "अगले 15 दिनों में देय",
+  "Overdue filings": "देर से फाइलिंग",
+  "Schemes you likely qualify for": "आपके लिए योग्य योजनाएँ",
+  "Estimated yearly interest saving": "अनुमानित सालाना ब्याज बचत",
+  "Cash unlockable via TReDS": "TReDS से मिल सकने वाली नकदी",
+  "Recent orders": "हाल के ऑर्डर",
+  "Customer credit": "ग्राहक उधारी",
+  "Overdue invoices": "बकाया बिल",
+  "Stock register": "स्टॉक रजिस्टर",
+  "Purchase orders": "खरीद ऑर्डर",
+  "Work orders": "वर्क ऑर्डर",
+  Shipments: "शिपमेंट",
+  "Today's roster": "आज की हाजिरी",
+  "Inspection log": "जाँच रजिस्टर",
+  "Compliance calendar": "अनुपालन कैलेंडर",
+};
+
+export function t(lang: Lang, s: string): string {
+  if (lang === "en") return s;
+  if (HI[s]) return HI[s];
+  // prefix match for labels like "Revenue · Oct 26"
+  const [head, tail] = s.split(" · ");
+  if (tail) {
+    const map: Record<string, string> = { Revenue: "बिक्री", EBITDA: "EBITDA", "Gross payroll": "कुल वेतन" };
+    if (map[head]) return `${map[head]} · ${tail}`;
+  }
+  return s;
+}
