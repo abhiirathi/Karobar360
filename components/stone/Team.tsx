@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, ChevronRight, KeyRound, Plus, RefreshCw } from "lucide-react";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { AREAS, ROLES, clampPerms, level, roleLabel, type AreaKey, type Level, type Me, type Perms } from "@/lib/stone/perm";
-import { hasBlocks } from "@/lib/stone/modules";
+import { hasBlocks, jobOnly } from "@/lib/stone/modules";
 import type { Modules } from "@/lib/stone/types";
 import type { Ctx } from "./StoneApp";
 import { Drawer, F, Grid, Note, TextIn } from "./ui";
@@ -11,7 +11,7 @@ import { Drawer, F, Grid, Note, TextIn } from "./ui";
 /** Areas that make sense for this business. */
 export function areasFor(m: Modules) {
   const on: Record<AreaKey, boolean> = {
-    quarry: m.quarry, blocks: hasBlocks(m), processing: m.processing, stores: m.stores, stock: m.depot || m.trading || m.processing || m.imports,
+    quarry: m.quarry, blocks: hasBlocks(m), processing: m.processing, jobwork: !!m.jobwork, stores: m.stores, stock: (m.depot || m.trading || m.processing || m.imports) && !jobOnly(m),
     sales: true, trade: m.imports || m.exports, parties: true, tally: true, settings: true, labour: m.processing || m.quarry || m.stores,
   };
   return AREAS.filter((a) => on[a.key]);

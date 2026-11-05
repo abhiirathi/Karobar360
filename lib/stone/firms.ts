@@ -4,6 +4,7 @@ import type { Block, Firm, FirmKind, Modules, SlabLot, StoneDB, StoneSettings, T
 export const FIRM_KINDS: { key: FirmKind; label: string; hint: string; m: Partial<Modules> }[] = [
   { key: "mine", label: "Mine / quarry", hint: "Extracts blocks, rawanna, diesel and wire per tonne", m: { quarry: true, stores: true } },
   { key: "processing", label: "Manufacturing unit", hint: "Block yard, gang saws, slabs and lots", m: { buyBlocks: true, processing: true, stores: true } },
+  { key: "jobwork", label: "Job work unit", hint: "Cuts customers' own blocks into slabs for a charge", m: { processing: true, jobwork: true, stores: true } },
   { key: "distribution", label: "Distribution / depot", hint: "Slab inventory, warehouse, sales and dealers", m: { trading: true, depot: true } },
   { key: "trade", label: "Import and export", hint: "Shipments, BLs, landed cost, exports", m: { imports: true, exports: true, trading: true, depot: true } },
   { key: "other", label: "Other", hint: "Pick the sections yourself", m: { depot: true } },
@@ -13,14 +14,14 @@ export const kindModules = (k: FirmKind) => presetModules(FIRM_KINDS.find((x) =>
 
 export const firmsOf = (s: StoneSettings | undefined): Firm[] => s?.firms ?? [];
 /** The order stone moves in: mine, then processing, then distribution. Used wherever firms are listed. */
-const FLOW: Record<FirmKind, number> = { mine: 0, processing: 1, distribution: 2, trade: 3, other: 4 };
+const FLOW: Record<FirmKind, number> = { mine: 0, processing: 1, jobwork: 1, distribution: 2, trade: 3, other: 4 };
 export const orderedFirms = (s: StoneSettings | undefined): Firm[] => firmsOf(s).map((f, i) => ({ f, i })).sort((a, b) => (FLOW[a.f.kind] ?? 9) - (FLOW[b.f.kind] ?? 9) || a.i - b.i).map((x) => x.f);
 export const multiFirm = (s: StoneSettings | undefined) => firmsOf(s).length > 1;
 /** Records made before firms were set up belong to the first firm. */
 export const firmOf = (x: { firmId?: string }, s: StoneSettings) => x.firmId || firmsOf(s)[0]?.id || "";
 export const firmName = (s: StoneSettings, id: string) => firmsOf(s).find((f) => f.id === id)?.name ?? "—";
 
-const SCOPED = ["blocks", "lots", "sales", "mineCosts", "jobs", "shipments", "damages", "labour"] as const;
+const SCOPED = ["blocks", "lots", "sales", "mineCosts", "jobs", "shipments", "damages", "jobwork", "labour"] as const;
 
 /** What one firm sees: its own records, and its own name, GSTIN and sections on every screen and invoice. */
 export function scope(db: StoneDB, firmId: string | null): StoneDB {
@@ -75,11 +76,13 @@ export function journey(db: StoneDB, q: string) {
     const origin = firmAt(block.trail, firmOf(block, s));
     steps.push({ date: block.date, firm: origin, title: block.source === "own_mine" ? `Block ${block.no} extracted` : block.source === "import" ? `Block ${block.no} imported` : `Block ${block.no} bought`, detail: [block.variety, block.source === "own_mine" ? block.mine : sup ?? block.mine, block.tonnes ? `${block.tonnes} t` : "", block.eRawanna ? `rawanna ${block.eRawanna}` : "", block.vehicleNo].filter(Boolean).join(" · ") });
     for (const t of block.trail ?? []) steps.push({ date: t.date, firm: t.to, tone: "move", title: `Moved to ${firmName(s, t.to)}`, detail: [`from ${firmName(s, t.from)}`, t.doc && `doc ${t.doc}`, t.value ? `₹${Math.round(t.value).toLocaleString("en-IN")}` : "", t.note].filter(Boolean).join(" · ") });
+    if (block.godown && block.status !== "at_mine") steps.push({ date: block.receivedOn || block.date, firm: firmOf(block, s), title: `Into ${block.godown}`, detail: block.tonnes ? `${block.tonnes} t received` : "Received weight not entered yet" });
     const job = db.jobs.find((j) => j.blockId === block.id);
+    if (block.processOn) steps.push({ date: block.processOn, firm: firmOf(block, s), title: "Issued for processing", detail: job?.machine ?? "" });
     const lots = db.lots.filter((l) => l.blockId === block.id || l.slabs?.some((x) => x.blockId === block.id));
     if (job || lots.length) {
       const n = lots.reduce((a, l) => a + (l.slabs?.filter((x) => x.blockId === block.id).length || l.pieces), 0);
-      steps.push({ date: job?.finishedOn ?? lots[0]?.createdAt ?? "", firm: job ? firmOf(job, s) : firmAt(lots[0]?.trail, firmOf(lots[0], s)), tone: "cut", title: `Cut into ${n} slabs`, detail: `Lots ${lots.map((l) => l.lotNo).join(", ")}${job ? ` · ${job.machine}` : ""}` });
+      steps.push({ date: job?.finishedOn ?? lots[0]?.createdAt ?? "", firm: job ? firmOf(job, s) : firmAt(lots[0]?.trail, firmOf(lots[0], s)), tone: "cut", title: `Processed into ${n} slabs`, detail: `Lots ${lots.map((l) => l.lotNo).join(", ")}${job ? ` · ${job.machine}` : ""}` });
     }
     if (block.status === "sold") {
       const sale = db.sales.find((x) => x.lines.some((l) => l.blockId === block.id));

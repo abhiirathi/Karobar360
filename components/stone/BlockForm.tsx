@@ -4,19 +4,12 @@ import { ArrowRightLeft, Camera, Trash2 } from "lucide-react";
 import { baseCost, cbm, mineMonth, months, n2, purchaseValue, rs, today, uid, weightCheck } from "@/lib/stone/calc";
 import { emptyBlock } from "@/lib/stone/seed";
 import { ownMines, qualities } from "@/lib/stone/costing";
-import type { Block, BlockStatus, StoneDB } from "@/lib/stone/types";
+import type { Block, StoneDB } from "@/lib/stone/types";
+import { STATUS_LABEL, godowns } from "@/lib/stone/godowns";
 import { Area, Drawer, F, Grid, Note, NumIn, Section, Sel, TextIn, readPhoto } from "./ui";
 import { fileSrc } from "./files";
 
-export const STATUS_LABEL: Record<BlockStatus, string> = {
-  at_mine: "At mine",
-  in_transit: "On the road",
-  in_yard: "In block yard",
-  on_saw: "On saw",
-  sawn: "Sawn into slabs",
-  sold: "Sold as block",
-  rejected: "Rejected / written off",
-};
+export { STATUS_LABEL };
 
 export const VARIETIES = [
   "Makrana Albeta", "Makrana Kumari", "Makrana Dungri", "Morwad White", "Rajnagar White", "Agariya White", "Banswara White",
@@ -38,6 +31,7 @@ export default function BlockForm({ db, initial, mode, onSave, onDelete, onClose
 }) {
   const S = db.settings;
   const mines = ownMines(db);
+  const gds = godowns(db);
   const lastMineRate = useMemo(() => {
     const ms = months(db).reverse();
     for (const m of ms) {
@@ -53,7 +47,8 @@ export default function BlockForm({ db, initial, mode, onSave, onDelete, onClose
     e.date = today();
     if (mode === "import") {
       e.source = "import";
-      e.status = "in_yard";
+      e.status = "godown";
+      e.godown = gds[0] ?? "";
       e.rateBasis = "cbm";
       e.receivedOn = today();
     } else if (mode === "own") {
@@ -62,7 +57,8 @@ export default function BlockForm({ db, initial, mode, onSave, onDelete, onClose
       e.status = "at_mine";
       e.rate = lastMineRate;
     } else {
-      e.status = "in_transit";
+      e.status = "godown";
+      e.godown = gds[0] ?? "";
     }
     return e;
   });
@@ -83,7 +79,7 @@ export default function BlockForm({ db, initial, mode, onSave, onDelete, onClose
     if (!b.variety.trim()) return setErr("Pick or type the stone quality.");
     if (dup) return setErr(`Block ${b.no} is already in your register.`);
     const out = { ...b, id: b.id || uid() };
-    if (!out.receivedOn && (out.status === "in_yard" || out.status === "on_saw")) out.receivedOn = today();
+    if (!out.receivedOn && out.status === "godown" && out.tonnes) out.receivedOn = today();
     onSave(out);
   };
 
@@ -191,8 +187,9 @@ export default function BlockForm({ db, initial, mode, onSave, onDelete, onClose
 
       <Section title="Where it is">
         <Grid cols={3}>
-          <F label="Status" span={2}><Sel value={b.status} onChange={(v) => set("status", v as BlockStatus)} options={(Object.keys(STATUS_LABEL) as BlockStatus[]).map((k) => ({ v: k, l: STATUS_LABEL[k] }))} /></F>
-          <F label="Received at unit"><TextIn type="date" value={b.receivedOn} onChange={(v) => set("receivedOn", v)} /></F>
+          <F box label="Status" hint="Changes by itself: Processing on the block list, Processed from the lots form, Sold from a sale"><div className="field flex items-center text-ink-2">{STATUS_LABEL[b.status]}</div></F>
+          {b.status === "godown" && <F label="Godown" hint={gds.length ? undefined : "Add your godowns under Masters → Godowns"}><Sel value={b.godown ?? ""} onChange={(v) => set("godown", v)} placeholder="Choose godown" options={[...new Set([...gds, b.godown ?? ""])].filter(Boolean).map((g) => ({ v: g, l: g }))} /></F>}
+          <F label="Received on"><TextIn type="date" value={b.receivedOn} onChange={(v) => set("receivedOn", v)} /></F>
           <F label="Defects / damage" span={3}><Area value={b.defects} onChange={(v) => set("defects", v)} placeholder="Cracks, colour patches, veins, chipped corners" /></F>
           <F label="Notes" span={3}><Area value={b.notes} onChange={(v) => set("notes", v)} /></F>
         </Grid>

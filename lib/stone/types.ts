@@ -4,11 +4,12 @@
 export type StoneType = "marble" | "granite" | "sandstone" | "quartzite" | "onyx" | "other";
 export type Site = "mine" | "unit" | "depot";
 export type BlockSource = "own_mine" | "purchase" | "import";
-export type BlockStatus = "at_mine" | "in_transit" | "in_yard" | "on_saw" | "sawn" | "sold" | "rejected";
+/** A block sits in a godown, is issued for processing, comes out as lots, or is sold as it is. Quarry blocks stay at the mine until sold. */
+export type BlockStatus = "at_mine" | "godown" | "processing" | "processed" | "sold" | "written_off";
 export type Grade = "A" | "B" | "C" | "Commercial";
 export type RateBasis = "tonne" | "cbm";
 
-export type PartyKind = "customer" | "supplier" | "vendor" | "transporter" | "quality" | "mine";
+export type PartyKind = "customer" | "supplier" | "vendor" | "transporter" | "quality" | "mine" | "godown";
 
 /** A master record: customer, block supplier, vendor, transporter, stone quality or own mine. */
 export interface Party {
@@ -77,6 +78,8 @@ export interface Block {
   defects: string;
   photos: string[];
   status: BlockStatus;
+  godown?: string; // which godown it lies in, from Masters → Godowns
+  processOn?: string; // date it was issued for processing
   receivedOn: string;
   damageAlloc: number; // ₹ added by damage spreads
   notes: string;
@@ -112,7 +115,7 @@ export interface Transfer {
   note: string;
 }
 
-export type FirmKind = "mine" | "processing" | "distribution" | "trade" | "other";
+export type FirmKind = "mine" | "processing" | "jobwork" | "distribution" | "trade" | "other";
 
 /** One company of the group: its own GSTIN, invoices and sections. */
 export interface Firm {
@@ -374,6 +377,7 @@ export interface Modules {
   exports: boolean;
   trading: boolean; // buys slabs and resells
   depot: boolean; // sells slabs from a depot or showroom
+  jobwork?: boolean; // cuts customers' own blocks for a charge
 }
 
 export interface TallySettings {
@@ -416,12 +420,13 @@ export interface StoneSettings {
   firms?: Firm[]; // the companies of the group; the first one holds records with no firm set
   dashboard?: { hidden: string[]; order: string[]; kpis?: string[] };
   catalogue?: { enabled: boolean; showRates: boolean; whatsapp: string; note: string };
+  jobwork?: JobSettings;
   /** Optional clean-up of settled data. Off unless the owner switches it on. */
   purge?: {
     enabled: boolean;
     after: "paid" | "days"; // right after full payment, or N days after it
     days: number;
-    stock: boolean; // also remove sold-out slab lots and the block records behind them
+    stock?: boolean; // no longer used: the whole trail always goes with the invoices
   };
 }
 
@@ -461,6 +466,134 @@ export interface StoneDB {
   sales: Sale[];
   /** Labour list with daily attendance. Added Nov 2026; missing in older data. */
   labour?: Worker[];
+  jobwork?: JobOrder[];
+}
+
+// ─── Job work: cutting a customer's own block into slabs for a charge ───
+// The block and its slabs stay the customer's property: they never enter our stock, costs or sales.
+
+export type JobBlockStatus = "expected" | "in_yard" | "on_saw" | "cut" | "returned";
+
+/** What came off the saw for one customer block. */
+export interface JobCut {
+  machine: string;
+  startedOn: string;
+  finishedOn: string;
+  thicknessMm: number;
+  finish: string;
+  slabs: number; // good slabs
+  sqft: number; // good slabs, sq ft
+  slabL: number; // cm, average
+  slabW: number;
+  brokenSlabs: number; // broke or cracked while cutting
+  brokenSqft: number;
+  hours: number;
+  note: string;
+}
+
+export interface JobBlock {
+  id: string;
+  no: string; // the customer's block mark
+  variety: string;
+  stoneType: StoneType;
+  l: number; // cm
+  w: number;
+  h: number;
+  tonnes: number;
+  receivedOn: string;
+  vehicleNo: string;
+  challanNo: string; // the customer's delivery challan
+  ewayBill: string;
+  condition: string; // cracks, veins, chips seen on arrival
+  photos: string[];
+  status: JobBlockStatus;
+  cut?: JobCut;
+}
+
+/** A charge on top of cutting: resin, polish, netting, edge cutting, loading. */
+export interface JobExtra {
+  label: string;
+  basis: "sqft" | "slab" | "lump"; // per sq ft of good slabs, per good slab, or once per bill
+  rate: number;
+}
+
+export interface JobDispatchLine {
+  blockId: string;
+  slabs: number; // good slabs sent
+  sqft: number;
+  broken: number; // broken pieces sent back
+}
+
+/** Delivery challan for slabs going back to the customer, or to whoever they name. */
+export interface JobDispatch {
+  id: string;
+  no: string;
+  date: string;
+  vehicleNo: string;
+  driver: string;
+  driverPhone: string;
+  transporterId: string;
+  ewayBill: string;
+  value: number; // value of the goods, for the challan and e-way bill
+  shipTo: string; // "" = customer's own address
+  offcuts: string; // off-cuts and waste sent back with this vehicle
+  lines: JobDispatchLine[];
+  /** The owner let it go although the customer had dues past credit. */
+  release?: { by: string; reason: string; dues: number };
+  notes: string;
+}
+
+export interface JobBillLine {
+  kind: "cut" | "extra" | "rent" | "broken" | "other";
+  label: string;
+  qty: number;
+  unit: string;
+  rate: number;
+  note?: string; // why: required for broken slabs and other manual charges
+}
+
+export interface JobBill {
+  id: string;
+  invoiceNo: string;
+  date: string;
+  blockIds: string[]; // blocks whose cutting this bill covers
+  lines: JobBillLine[];
+  gstRate: number;
+  sac: string;
+  paid: boolean;
+  paidOn?: string;
+  irn?: string;
+  notes: string;
+}
+
+export interface JobOrder {
+  id: string;
+  no: string;
+  date: string;
+  customerId: string;
+  thicknessMm: number;
+  finish: string;
+  instructions: string; // sizes, calibration, edges, anything the saw needs to know
+  rate: number; // ₹ per sq ft of good slabs
+  extras: JobExtra[];
+  waste: "return" | "keep"; // off-cuts and waste go back, or stay with us
+  freeDays: number; // days a block may wait at the unit without rent
+  rentPerDay: number; // ₹ per block per day after that; 0 = no rent
+  blocks: JobBlock[];
+  dispatches: JobDispatch[];
+  bills: JobBill[];
+  closed: boolean;
+  notes: string;
+  firmId?: string;
+}
+
+export interface JobSettings {
+  rate: number;
+  gstRate: number;
+  sac: string;
+  freeDays: number;
+  rentPerDay: number;
+  extras: JobExtra[];
 }
 
 /** Figures pulled from the company's Tally by the connector. */

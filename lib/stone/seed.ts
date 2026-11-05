@@ -1,7 +1,8 @@
 import { baseCost, cbm, gstinCheckChar, spreadDamage } from "./calc";
 import { presetModules } from "./modules";
 import { slabNo, syncLot } from "./slabs";
-import type { StoreItem, StoreMove, Block, DamageEvent, MineCost, Party, Sale, SawJob, Shipment, SlabLot, StoneDB, StoneSettings, Worker, Mark } from "./types";
+import { autoLines, emptyJobBlock } from "./jobwork";
+import type { StoreItem, StoreMove, Block, DamageEvent, JobBlock, JobOrder, MineCost, Party, Sale, SawJob, Shipment, SlabLot, StoneDB, StoneSettings, Worker, Mark } from "./types";
 
 // Sample company: a gang-saw unit in Kishangarh with its own quarry near Rajsamand.
 // Every figure is sample data, built relative to today so the screens always look current.
@@ -51,7 +52,7 @@ export function emptyBlock(): Block {
     id: "", no: "", variety: "", stoneType: "marble", source: "purchase", supplierId: "", mine: "", leaseNo: "", date: "",
     l: 0, w: 0, h: 0, tonnes: 0, billedTonnes: 0, weighSlip: "", rate: 0, rateBasis: "tonne", royalty: 0, dmft: 0,
     eRawanna: "", ewayBill: "", invoiceNo: "", vehicleNo: "", driver: "", driverPhone: "", transporterId: "", freight: 0,
-    loading: 0, otherCost: 0, importCost: 0, shipmentId: "", grade: "A", defects: "", photos: [], status: "in_yard",
+    loading: 0, otherCost: 0, importCost: 0, shipmentId: "", grade: "A", defects: "", photos: [], status: "godown",
     receivedOn: "", damageAlloc: 0, notes: "",
   };
 }
@@ -93,6 +94,8 @@ export function seed(): StoneDB {
     party("s6", "supplier", "Anatolia Natural Stone Ltd.", "Mehmet Yilmaz", { intl: true, country: "Turkey", state: "96", city: "Burdur", billing: "Organize Sanayi Bölgesi", creditDays: 0 }),
     party("v1", "vendor", "Morwad Diesel Point", "Pradeep Paliwal", { gstin: gst("08", "AAPFM5521D"), pan: "AAPFM5521D", city: "Morwad, Rajsamand", billing: "Nathdwara Road", pincode: "313324", creditDays: 15, notes: "Diesel for the excavator, loader and DG set" }),
     party("v2", "vendor", "Rajsamand Earthmovers", "Dinesh Gurjar", { gstin: gst("08", "ABBFR7730E"), pan: "ABBFR7730E", city: "Rajsamand", billing: "Kankroli bypass", pincode: "313326", creditDays: 30, notes: "Hydra crane and excavator on hire, servicing" }),
+    party("g1", "godown", "Main yard", "", { billing: "Plot 14, RIICO Phase II", city: "Kishangarh, Ajmer" }),
+    party("g2", "godown", "Godown 2", "", { billing: "Plot 31, RIICO Phase III", city: "Kishangarh, Ajmer" }),
     party("m1", "mine", "Morwad quarry, Rajsamand", "", { leaseNo: "ML 41/2009", city: "Morwad, Rajsamand" }),
     ...([["Morwad White", "marble"], ["Makrana Albeta", "marble"], ["Agariya White", "marble"], ["Udaipur Green", "marble"], ["Jalore Rosy Pink", "granite"], ["Burdur Beige", "marble"], ["Carrara White", "marble"]] as const)
       .map(([q, st], i) => party(`q${i + 1}`, "quality", q, "", { stoneType: st })),
@@ -104,6 +107,7 @@ export function seed(): StoneDB {
     party("c3", "customer", "Shivam Infra Projects", "Hardik Patel", { gstin: gst("24", "AAQCS4410N"), pan: "AAQCS4410N", city: "Ahmedabad", state: "24", billing: "SG Highway, Thaltej", pincode: "380059", creditDays: 60, creditLimit: 4000000, shipping: "Site: Shivam Heights, Gota, Ahmedabad", contact: "Site engineer: Nirav Shah" }),
     party("c5", "customer", "Al Noor Building Materials LLC", "Imran Qureshi", { intl: true, country: "United Arab Emirates", state: "96", city: "Dubai", billing: "Al Quoz Industrial Area 3", pincode: "", phone: "+971 50 412 7788", whatsapp: "+971504127788", creditDays: 60, creditLimit: 5000000, pan: "100384920600003" }),
     party("c4", "customer", "Krishna Interiors", "Pooja Agarwal", { gstin: gst("08", "BXKPA9921L"), pan: "BXKPA9921L", city: "Ajmer", billing: "Vaishali Nagar", pincode: "305004", creditDays: 15, creditLimit: 500000 }),
+    party("c6", "customer", "Rathore Marble Traders", "Devendra Singh Rathore", { gstin: gst("08", "AAKFR3307M"), pan: "AAKFR3307M", city: "Kishangarh, Ajmer", billing: "Marble Mandi, Gate 4", pincode: "305801", creditDays: 15, creditLimit: 300000, contact: "Devendra Singh" }),
   ];
 
   const blocks: Block[] = [];
@@ -129,23 +133,23 @@ export function seed(): StoneDB {
       l, w, h, tonnes: t, billedTonnes: t, rate: 6100, rateBasis: "tonne", eRawanna: a < 3 ? "" : `ER${String(5310200 + i * 37)}`,
       vehicleNo: a < 3 ? "" : vehiclesOwn[i % 3], transporterId: "t2", freight: a < 3 ? 0 : Math.round(t * 520), loading: a < 3 ? 0 : 1800,
       grade: r() > 0.8 ? "B" : "A", weighSlip: a < 5 ? "" : `WB-${7700 + i}`,
-      status: a < 3 ? "at_mine" : a < 5 ? "in_transit" : a < 30 ? "in_yard" : "sawn",
+      status: a < 5 ? "at_mine" : a < 30 ? "godown" : "processed",
       receivedOn: a < 5 ? "" : day(off + 2),
     });
   }
 
   // Purchased blocks.
-  const albeta1 = mk({ no: "MK-A-0917", variety: "Makrana Albeta", source: "purchase", supplierId: "s1", mine: "Ulodi quarry, Makrana", date: day(-52), l: 210, w: 140, h: 125, tonnes: 9.8, billedTonnes: 10.1, rate: 32000, vehicleNo: "RJ 21 GB 7712", transporterId: "t1", freight: 6200, loading: 2400, invoiceNo: "MMU/1182", purchaseId: "pb1", eRawanna: "ER5288731", ewayBill: "4718 2290 1132", weighSlip: "WB-7581", status: "sawn", receivedOn: day(-51) });
-  mk({ no: "MK-A-0918", variety: "Makrana Albeta", source: "purchase", supplierId: "s1", mine: "Ulodi quarry, Makrana", date: day(-52), l: 195, w: 135, h: 120, tonnes: 8.6, billedTonnes: 8.6, rate: 32000, vehicleNo: "RJ 21 GB 7712", transporterId: "t1", freight: 5400, loading: 2400, invoiceNo: "MMU/1182", purchaseId: "pb1", eRawanna: "ER5288732", ewayBill: "4718 2290 1132", weighSlip: "WB-7581", status: "in_yard", receivedOn: day(-51) });
+  const albeta1 = mk({ no: "MK-A-0917", variety: "Makrana Albeta", source: "purchase", supplierId: "s1", mine: "Ulodi quarry, Makrana", date: day(-52), l: 210, w: 140, h: 125, tonnes: 9.8, billedTonnes: 10.1, rate: 32000, vehicleNo: "RJ 21 GB 7712", transporterId: "t1", freight: 6200, loading: 2400, invoiceNo: "MMU/1182", purchaseId: "pb1", eRawanna: "ER5288731", ewayBill: "4718 2290 1132", weighSlip: "WB-7581", status: "processed", receivedOn: day(-51) });
+  mk({ no: "MK-A-0918", variety: "Makrana Albeta", source: "purchase", supplierId: "s1", mine: "Ulodi quarry, Makrana", date: day(-52), l: 195, w: 135, h: 120, tonnes: 8.6, billedTonnes: 8.6, rate: 32000, vehicleNo: "RJ 21 GB 7712", transporterId: "t1", freight: 5400, loading: 2400, invoiceNo: "MMU/1182", purchaseId: "pb1", eRawanna: "ER5288732", ewayBill: "4718 2290 1132", weighSlip: "WB-7581", status: "godown", receivedOn: day(-51) });
 
   const ag = [
-    mk({ no: "AG-3301", variety: "Agariya White", source: "purchase", supplierId: "s2", mine: "Agariya", date: day(-19), l: 260, w: 150, h: 140, tonnes: 14.4, billedTonnes: 15.4, rate: 3200, vehicleNo: "RJ 30 GA 9054", transporterId: "t2", freight: 7400, loading: 2000, invoiceNo: "ASS/774", purchaseId: "pb2", eRawanna: "ER5341102", ewayBill: "5120 6634 0918", weighSlip: "WB-7802", status: "in_yard", receivedOn: day(-18) }),
-    mk({ no: "AG-3302", variety: "Agariya White", source: "purchase", supplierId: "s2", mine: "Agariya", date: day(-19), l: 240, w: 145, h: 130, tonnes: 12.2, billedTonnes: 12.2, rate: 3200, vehicleNo: "RJ 30 GA 9054", transporterId: "t2", freight: 6100, loading: 2000, invoiceNo: "ASS/774", purchaseId: "pb2", eRawanna: "ER5341103", ewayBill: "5120 6634 0918", weighSlip: "WB-7802", status: "sawn", receivedOn: day(-18) }),
-    mk({ no: "AG-3303", variety: "Agariya White", source: "purchase", supplierId: "s2", mine: "Agariya", date: day(-19), l: 230, w: 140, h: 120, tonnes: 10.4, billedTonnes: 10.4, rate: 3200, vehicleNo: "RJ 30 GA 9054", transporterId: "t2", freight: 5200, loading: 2000, invoiceNo: "ASS/774", purchaseId: "pb2", eRawanna: "ER5341104", ewayBill: "5120 6634 0918", weighSlip: "WB-7802", status: "rejected", defects: "Cracked through the middle while unloading from trolley", receivedOn: day(-18) }),
+    mk({ no: "AG-3301", variety: "Agariya White", source: "purchase", supplierId: "s2", mine: "Agariya", date: day(-19), l: 260, w: 150, h: 140, tonnes: 14.4, billedTonnes: 15.4, rate: 3200, vehicleNo: "RJ 30 GA 9054", transporterId: "t2", freight: 7400, loading: 2000, invoiceNo: "ASS/774", purchaseId: "pb2", eRawanna: "ER5341102", ewayBill: "5120 6634 0918", weighSlip: "WB-7802", status: "godown", receivedOn: day(-18) }),
+    mk({ no: "AG-3302", variety: "Agariya White", source: "purchase", supplierId: "s2", mine: "Agariya", date: day(-19), l: 240, w: 145, h: 130, tonnes: 12.2, billedTonnes: 12.2, rate: 3200, vehicleNo: "RJ 30 GA 9054", transporterId: "t2", freight: 6100, loading: 2000, invoiceNo: "ASS/774", purchaseId: "pb2", eRawanna: "ER5341103", ewayBill: "5120 6634 0918", weighSlip: "WB-7802", status: "processed", receivedOn: day(-18) }),
+    mk({ no: "AG-3303", variety: "Agariya White", source: "purchase", supplierId: "s2", mine: "Agariya", date: day(-19), l: 230, w: 140, h: 120, tonnes: 10.4, billedTonnes: 10.4, rate: 3200, vehicleNo: "RJ 30 GA 9054", transporterId: "t2", freight: 5200, loading: 2000, invoiceNo: "ASS/774", purchaseId: "pb2", eRawanna: "ER5341104", ewayBill: "5120 6634 0918", weighSlip: "WB-7802", status: "written_off", defects: "Cracked through the middle while unloading from trolley", receivedOn: day(-18) }),
   ];
-  mk({ no: "UG-118", variety: "Udaipur Green", source: "purchase", supplierId: "s3", mine: "Kesariyaji", date: day(-9), l: 200, w: 130, h: 115, tonnes: 8.1, billedTonnes: 8.4, rate: 9000, vehicleNo: "RJ 27 GD 3341", transporterId: "t2", freight: 5600, loading: 1800, invoiceNo: "RGM/2207", purchaseId: "pb3", eRawanna: "", ewayBill: "6011 2093 4471", weighSlip: "WB-7866", status: "in_yard", receivedOn: day(-8), notes: "Rawanna copy not received with the vehicle" });
-  mk({ no: "UG-119", variety: "Udaipur Green", source: "purchase", supplierId: "s3", mine: "Kesariyaji", date: day(-2), l: 210, w: 135, h: 120, tonnes: 0, billedTonnes: 9.2, rate: 9000, vehicleNo: "RJ 27 GD 3341", transporterId: "t2", freight: 5900, invoiceNo: "RGM/2231", purchaseId: "pb4", eRawanna: "ER5350417", ewayBill: "6011 2093 5102", status: "in_transit" });
-  const jal = mk({ no: "JL-RP-552", variety: "Jalore Rosy Pink", stoneType: "granite", source: "purchase", supplierId: "s4", mine: "Bhinmal Road", date: day(-61), l: 280, w: 160, h: 150, tonnes: 18.1, billedTonnes: 18.1, rate: 3800, vehicleNo: "RJ 16 GA 6620", transporterId: "t1", freight: 14400, loading: 3000, invoiceNo: "JGQ/091", purchaseId: "pb5", eRawanna: "ER5270036", ewayBill: "3907 1150 8806", weighSlip: "WB-7524", status: "sawn", receivedOn: day(-59) });
+  mk({ no: "UG-118", variety: "Udaipur Green", source: "purchase", supplierId: "s3", mine: "Kesariyaji", date: day(-9), l: 200, w: 130, h: 115, tonnes: 8.1, billedTonnes: 8.4, rate: 9000, vehicleNo: "RJ 27 GD 3341", transporterId: "t2", freight: 5600, loading: 1800, invoiceNo: "RGM/2207", purchaseId: "pb3", eRawanna: "", ewayBill: "6011 2093 4471", weighSlip: "WB-7866", status: "godown", receivedOn: day(-8), notes: "Rawanna copy not received with the vehicle" });
+  mk({ no: "UG-119", variety: "Udaipur Green", source: "purchase", supplierId: "s3", mine: "Kesariyaji", date: day(-2), l: 210, w: 135, h: 120, tonnes: 0, billedTonnes: 9.2, rate: 9000, vehicleNo: "RJ 27 GD 3341", transporterId: "t2", freight: 5900, invoiceNo: "RGM/2231", purchaseId: "pb4", eRawanna: "ER5350417", ewayBill: "6011 2093 5102", status: "godown" });
+  const jal = mk({ no: "JL-RP-552", variety: "Jalore Rosy Pink", stoneType: "granite", source: "purchase", supplierId: "s4", mine: "Bhinmal Road", date: day(-61), l: 280, w: 160, h: 150, tonnes: 18.1, billedTonnes: 18.1, rate: 3800, vehicleNo: "RJ 16 GA 6620", transporterId: "t1", freight: 14400, loading: 3000, invoiceNo: "JGQ/091", purchaseId: "pb5", eRawanna: "ER5270036", ewayBill: "3907 1150 8806", weighSlip: "WB-7524", status: "processed", receivedOn: day(-59) });
 
   // Imports: Turkish beige blocks (received) — landed cost shared by CBM.
   const shipments: Shipment[] = [];
@@ -173,7 +177,7 @@ export function seed(): StoneDB {
       no: `TR-BB-${41 + i}`, variety: "Burdur Beige", source: "import", shipmentId: tr.id, supplierId: "s6", purchaseId: "pi1", invoiceNo: "ANS-2026-118", mine: "Turkey",
       imp: { blNo: tr.blNo, blDate: tr.blDate, vessel: tr.vessel, port: "Mundra", cif: Math.round(tr.cifUsd * tr.fx), charges: [{ label: "Customs duty", amount: tr.duty, note: `BE ${tr.beNo}` }, { label: "CHA charges", amount: tr.cha, note: "" }, { label: "Port, CFS & line charges", amount: tr.port, note: "" }, { label: "Freight port to yard", amount: tr.inland, note: "Mundra to Kishangarh" }] }, date: day(-24), l: x.l, w: x.w, h: x.h,
       tonnes: x.t, billedTonnes: x.t, rate: 0, rateBasis: "cbm", importCost: Math.round((trTotal * ((x.l * x.w * x.h) / 1e6)) / trVol),
-      vehicleNo: "GJ 12 BW 4410", status: i === 0 ? "sawn" : "in_yard", receivedOn: day(-24),
+      vehicleNo: "GJ 12 BW 4410", status: i === 0 ? "processed" : "godown", receivedOn: day(-24),
     });
     tr.receivedIds.push(b.id);
   });
@@ -254,7 +258,7 @@ export function seed(): StoneDB {
   const YIELD: Record<string, number> = { "Morwad White": 124, "Makrana Albeta": 112, "Agariya White": 128, "Jalore Rosy Pink": 104, "Burdur Beige": 119 };
   const LIST: Record<string, number> = { "Morwad White": 95, "Makrana Albeta": 430, "Agariya White": 62, "Jalore Rosy Pink": 78, "Burdur Beige": 420 };
   let lotN = 101;
-  for (const b of blocks.filter((x) => x.status === "sawn")) {
+  for (const b of blocks.filter((x) => x.status === "processed")) {
     const start = new Date(b.receivedOn || b.date);
     start.setDate(start.getDate() + 3);
     const s = start.toISOString().slice(0, 10);
@@ -377,8 +381,10 @@ export function seed(): StoneDB {
     topDebtors: [{ name: "Shivam Infra Projects", amount: 1460000 }, { name: "Gupta Stone Gallery", amount: 1120000 }, { name: "Al Noor Building Materials LLC", amount: 910000 }, { name: "Krishna Interiors", amount: 410000 }, { name: "Sharma Tiles & Marble House", amount: 310000 }],
     topCreditors: [{ name: "Makrana Marble Udyog", amount: 720000 }, { name: "Kishangarh Stone Chemicals", amount: 460000 }, { name: "Agariya Stone Supply", amount: 390000 }, { name: "Mewar Trailer Service", amount: 180000 }, { name: "Shri Balaji Roadlines", amount: 130000 }],
   };
-  const db: StoneDB = { v: 1, settings: S, parties, blocks, mineCosts, jobs, lots, damages: [dmg], shipments, sales, stores: { items, moves }, tally };
+  const db: StoneDB = { v: 1, settings: S, parties, blocks, mineCosts, jobs, lots, damages: [dmg], shipments, sales, stores: { items, moves }, tally, jobwork: jobSample(S, day) };
   group(db);
+  // Blocks in hand lie in the main yard; imported blocks in the second godown.
+  for (const b of db.blocks) if (b.status === "godown") b.godown = b.source === "import" ? "Godown 2" : "Main yard";
   db.labour = seedLabour(db.settings);
   return db;
 }
@@ -419,7 +425,7 @@ export function seedLabour(S: StoneSettings): Worker[] {
 /** The sample company runs as three firms: the quarry company, the processing unit and the depot. */
 function group(db: StoneDB) {
   const S = db.settings;
-  const unit = { id: "f1", name: S.company, kind: "processing" as const, gstin: S.gstin, address: S.address, city: S.city, state: S.state, pincode: S.pincode ?? "", phone: S.phone, invoicePrefix: S.invoicePrefix, modules: presetModules({ buyBlocks: true, processing: true, imports: true, stores: true }) };
+  const unit = { id: "f1", name: S.company, kind: "processing" as const, gstin: S.gstin, address: S.address, city: S.city, state: S.state, pincode: S.pincode ?? "", phone: S.phone, invoicePrefix: S.invoicePrefix, modules: presetModules({ buyBlocks: true, processing: true, imports: true, stores: true, jobwork: true }) };
   const mine = { id: "f2", name: "Shree Shyam Minerals", kind: "mine" as const, gstin: gst("08", "ABMFS7720K"), address: "Khasra 118, Morwad mining zone", city: "Morwad, Rajsamand", state: "08", pincode: "313324", phone: S.phone, invoicePrefix: "SSMN/26-27/", modules: presetModules({ quarry: true, stores: true }) };
   const depot = { id: "f3", name: "Shyam Stone Gallery", kind: "distribution" as const, gstin: gst("08", "AAJFS3394P"), address: "Marble Mandi, Gate 2", city: "Kishangarh, Ajmer", state: "08", pincode: "305801", phone: S.phone, invoicePrefix: "SSG/26-27/", modules: presetModules({ depot: true, trading: true, imports: true, exports: true }) };
   S.firms = [unit, mine, depot];
@@ -428,7 +434,7 @@ function group(db: StoneDB) {
   for (const c of db.mineCosts) c.firmId = mine.id;
   for (const b of db.blocks) {
     if (b.source !== "own_mine") { b.firmId = unit.id; continue; }
-    if (b.status === "at_mine" || b.status === "in_transit") { b.firmId = mine.id; continue; }
+    if (b.status === "at_mine") { b.firmId = mine.id; continue; }
     b.firmId = unit.id;
     b.trail = [{ date: b.receivedOn || b.date, from: mine.id, to: unit.id, doc: doc(), value: Math.round(baseCost(b)), note: b.vehicleNo ? `vehicle ${b.vehicleNo}` : "" }];
   }
@@ -440,9 +446,52 @@ function group(db: StoneDB) {
     if (l.site === "depot") l.trail = [{ date: l.createdAt, from: unit.id, to: depot.id, doc: doc(), value: Math.round(l.cost), note: "Shifted to depot" }];
   }
   for (const sh of db.shipments) sh.firmId = sh.dir === "import" && sh.kind === "blocks" ? unit.id : depot.id;
+  for (const o of db.jobwork ?? []) o.firmId = unit.id;
   for (const sale of db.sales) { sale.firmId = depot.id; sale.invoiceNo = sale.invoiceNo.replace(S.invoicePrefix, depot.invoicePrefix); }
 }
 
 const emptyBlockStatic = emptyBlock();
 const emptyShipStatic = emptyShipment("import");
 export { cbm };
+
+/** Customers' blocks cut for a charge at the unit: one order done and billed, one at the saw, one just in. */
+function jobSample(S: StoneSettings, day: (offset: number) => string): JobOrder[] {
+  S.jobwork = { rate: 18, gstRate: 5, sac: "9988", freeDays: 30, rentPerDay: 100, extras: [] };
+  const P = S.invoicePrefix;
+  const blk = (id: string, no: string, variety: string, size: [number, number, number], t: number, p: Partial<JobBlock>): JobBlock => ({ ...emptyJobBlock(), id, no, variety, l: size[0], w: size[1], h: size[2], tonnes: t, ...p });
+  const area = (L: number, W: number) => (L * W) / 929.0304;
+  const cut = (on: number, slabs: number, L: number, W: number, broken = 0, thk = 18, finish = "As cut") => ({ machine: "Gang saw 2", startedOn: day(on - 2), finishedOn: day(on), thicknessMm: thk, finish, slabs, sqft: Math.round(slabs * area(L, W) * 100) / 100, slabL: L, slabW: W, brokenSlabs: broken, brokenSqft: Math.round(broken * area(L, W) * 100) / 100, hours: 30, note: broken ? "Hidden crack along the vein" : "" });
+  const o1: JobOrder = {
+    id: "jo1", no: "JO-0001", date: day(-40), customerId: "c6", thicknessMm: 18, finish: "As cut", instructions: "Full slabs, no calibration. Mark block no. on every slab.", rate: 18,
+    extras: [{ label: "Netting", basis: "sqft", rate: 3 }, { label: "Loading", basis: "lump", rate: 1500 }], waste: "return", freeDays: 30, rentPerDay: 100,
+    blocks: [
+      blk("jb1", "RMT-221", "Makrana Dungri", [270, 165, 160], 19.2, { receivedOn: day(-38), vehicleNo: "RJ 01 GB 4471", challanNo: "RMT/118", status: "returned", condition: "Small chip on one top corner", cut: cut(-30, 52, 262, 156, 2) }),
+      blk("jb2", "RMT-224", "Makrana Dungri", [262, 158, 150], 16.8, { receivedOn: day(-38), vehicleNo: "RJ 01 GB 4471", challanNo: "RMT/119", status: "returned", cut: cut(-24, 48, 255, 146) }),
+    ],
+    dispatches: [], bills: [], closed: false, notes: "",
+  };
+  o1.dispatches.push(
+    { id: "jd1", no: `${P}JC-0001`, date: day(-27), vehicleNo: "RJ 01 GA 9023", driver: "Mohan Lal", driverPhone: "", transporterId: "t1", ewayBill: "4412 7781 3305", value: 380000, shipTo: "", offcuts: "2 broken pieces, 1 top slice", lines: [{ blockId: "jb1", slabs: 52, sqft: o1.blocks[0].cut!.sqft, broken: 2 }], notes: "" },
+    { id: "jd2", no: `${P}JC-0002`, date: day(-20), vehicleNo: "RJ 36 GA 1180", driver: "", driverPhone: "", transporterId: "", ewayBill: "", value: 340000, shipTo: "Rathore Marble Traders, Godown 7, RIICO Phase III, Kishangarh", offcuts: "", lines: [{ blockId: "jb2", slabs: 48, sqft: o1.blocks[1].cut!.sqft, broken: 0 }], notes: "Customer's own vehicle" },
+  );
+  const bill = (id: string, no: number, on: number, ids: string[], paidOn = "") => ({ id, invoiceNo: `${P}JW-${String(no).padStart(4, "0")}`, date: day(on), blockIds: ids, lines: autoLines(o1, o1.blocks.filter((b) => ids.includes(b.id)), day(on)), gstRate: 5, sac: "9988", paid: !!paidOn, paidOn, notes: "" });
+  o1.bills.push(bill("jbl1", 1, -27, ["jb1"], day(-12)), bill("jbl2", 2, -20, ["jb2"]));
+
+  const o2: JobOrder = {
+    id: "jo2", no: "JO-0002", date: day(-12), customerId: "c1", thicknessMm: 16, finish: "Polished", instructions: "Calibrate to 16 mm, polish one face, resin both sides.", rate: 20,
+    extras: [{ label: "Resin / epoxy", basis: "sqft", rate: 6 }, { label: "Polishing", basis: "sqft", rate: 9 }], waste: "keep", freeDays: 30, rentPerDay: 100,
+    blocks: [
+      blk("jb3", "ST-77", "Katni Beige", [280, 170, 155], 20.4, { receivedOn: day(-11), vehicleNo: "MP 21 H 6620", challanNo: "STM/0412", ewayBill: "3310 5528 9017", status: "cut", cut: cut(-4, 60, 272, 150, 3, 16, "Polished") }),
+      blk("jb4", "ST-78", "Katni Beige", [275, 160, 150], 18.1, { receivedOn: day(-11), vehicleNo: "MP 21 H 6620", challanNo: "STM/0412", status: "on_saw" }),
+      blk("jb5", "ST-79", "Katni Beige", [250, 155, 145], 15.2, { receivedOn: day(-6), vehicleNo: "MP 21 H 7714", challanNo: "STM/0418", status: "in_yard", condition: "Open vein on the long side, customer told" }),
+      blk("jb6", "ST-80", "Katni Beige", [0, 0, 0], 17, { status: "expected" }),
+    ],
+    dispatches: [], bills: [], closed: false, notes: "Customer collects with their own trailer.",
+  };
+  const o3: JobOrder = {
+    id: "jo3", no: "JO-0003", date: day(-3), customerId: "c6", thicknessMm: 18, finish: "As cut", instructions: "", rate: 18, extras: [{ label: "Netting", basis: "sqft", rate: 3 }], waste: "return", freeDays: 30, rentPerDay: 100,
+    blocks: [blk("jb7", "RMT-230", "Makrana Albeta", [240, 150, 140], 13.6, { receivedOn: day(-2), vehicleNo: "RJ 01 GB 4471", challanNo: "RMT/131", status: "in_yard" })],
+    dispatches: [], bills: [], closed: false, notes: "",
+  };
+  return [o1, o2, o3];
+}

@@ -10,8 +10,8 @@ import type { Ctx } from "./StoneApp";
 import { Area, Badge, Drawer, F, Grid, NumIn, Section, Sel, Seg, Table, TextIn, type Col } from "./ui";
 
 const COUNTRIES = ["United Arab Emirates", "Saudi Arabia", "Qatar", "Oman", "Kuwait", "Bahrain", "Nepal", "Bangladesh", "Sri Lanka", "Maldives", "Mauritius", "United States", "United Kingdom", "Australia", "Canada", "Singapore", "Malaysia", "Vietnam", "Italy", "Turkey", "Greece", "Spain", "Egypt", "Kenya", "South Africa", "Brazil", "Portugal", "Iran", "China"];
-const LABEL: Record<PartyKind, string> = { customer: "Customers", supplier: "Suppliers", vendor: "Vendors", transporter: "Transporters", quality: "Quality", mine: "Mines" };
-const ONE: Record<PartyKind, string> = { customer: "customer", supplier: "supplier", vendor: "vendor", transporter: "transporter", quality: "quality", mine: "mine" };
+const LABEL: Record<PartyKind, string> = { customer: "Customers", supplier: "Suppliers", vendor: "Vendors", transporter: "Transporters", quality: "Quality", mine: "Mines", godown: "Godowns" };
+const ONE: Record<PartyKind, string> = { customer: "customer", supplier: "supplier", vendor: "vendor", transporter: "transporter", quality: "quality", mine: "mine", godown: "godown" };
 const HINT: Record<PartyKind, string> = {
   customer: "Everyone you sell to, in India and abroad.",
   supplier: "Who you buy blocks from. Mark each one Domestic or Import; purchases follow it.",
@@ -19,6 +19,7 @@ const HINT: Record<PartyKind, string> = {
   transporter: "Every transporter, inward and outward.",
   quality: "Stone qualities you buy, cut and sell. Purchases pick from this list.",
   mine: "Your own quarries. Extracted blocks and extraction costs are entered against each one.",
+  godown: "Where your blocks are kept. Every purchase puts its blocks in one of these.",
 };
 const STONES = ["marble", "granite", "sandstone", "quartzite", "onyx", "other"] as const;
 
@@ -27,8 +28,10 @@ function usedBy(db: StoneDB, p: Party) {
   const n = p.company.trim().toLowerCase();
   if (p.kind === "quality") return db.blocks.some((b) => b.variety.toLowerCase() === n) || db.lots.some((l) => l.variety.toLowerCase() === n);
   if (p.kind === "mine") return db.blocks.some((b) => b.mine.toLowerCase() === n) || db.mineCosts.some((c) => c.mine.toLowerCase() === n);
+  if (p.kind === "godown") return db.blocks.some((b) => b.status === "godown" && (b.godown ?? "").toLowerCase() === n);
   const st = storesOf(db);
   return db.sales.some((s) => s.customerId === p.id || s.transporterId === p.id) || db.blocks.some((b) => b.supplierId === p.id || b.transporterId === p.id) || db.lots.some((l) => l.supplierId === p.id)
+    || (db.jobwork ?? []).some((o) => o.customerId === p.id || o.dispatches.some((d) => d.transporterId === p.id))
     || st.items.some((i) => i.vendorId === p.id) || st.moves.some((m) => m.supplierId === p.id) || db.mineCosts.some((c) => c.vendorId === p.id);
 }
 
@@ -61,6 +64,11 @@ export default function Parties({ ctx, kind }: { ctx: Ctx; kind: PartyKind }) {
     { key: "s", label: "Stone", render: (p) => (p.stoneType ? p.stoneType[0].toUpperCase() + p.stoneType.slice(1) : "—") },
     { key: "b", label: "Blocks", align: "right", render: (p) => String(db.blocks.filter((b) => b.variety === p.company).length) },
     { key: "l", label: "Slabs in stock", align: "right", render: (p) => `${n0(db.lots.filter((l) => l.variety === p.company).reduce((a, l) => a + l.available, 0))} sq ft` },
+    { key: "n", label: "Notes", render: (p) => <span className="text-ink-2">{p.notes}</span> },
+  ] : kind === "godown" ? [
+    { key: "c", label: "Godown", render: (p) => <span className="font-medium">{p.company}</span>, sort: (p) => p.company },
+    { key: "a", label: "Address", render: (p) => [p.billing, p.city].filter(Boolean).join(", ") || <span className="text-ink-3">—</span> },
+    { key: "b", label: "Blocks in it", align: "right", render: (p) => { const bs = db.blocks.filter((b) => b.status === "godown" && b.godown === p.company); return `${bs.length} · ${n0(bs.reduce((a, b) => a + (b.tonnes || b.billedTonnes), 0))} t`; } },
     { key: "n", label: "Notes", render: (p) => <span className="text-ink-2">{p.notes}</span> },
   ] : kind === "mine" ? [
     { key: "c", label: "Mine", render: (p) => <span className="font-medium">{p.company}</span>, sort: (p) => p.company },
@@ -105,7 +113,7 @@ export function PartyForm({ initial, onSave, onDelete, onClose, inUse, can }: { 
   const [err, setErr] = useState("");
   const set = <K extends keyof Party>(k: K, v: Party[K]) => setP((x) => ({ ...x, [k]: v }));
   const g = checkGstin(p.gstin);
-  const simple = p.kind === "quality" || p.kind === "mine";
+  const simple = p.kind === "quality" || p.kind === "mine" || p.kind === "godown";
   const twoWay = p.kind === "customer" || p.kind === "supplier";
   const onGstin = (v: string) => setP((x) => {
     const n = { ...x, gstin: v };
@@ -114,7 +122,7 @@ export function PartyForm({ initial, onSave, onDelete, onClose, inUse, can }: { 
     return n;
   });
   const save = () => {
-    if (!p.company.trim()) return setErr(p.kind === "quality" ? "Enter the quality name." : p.kind === "mine" ? "Enter the mine name." : "Company or firm name is needed.");
+    if (!p.company.trim()) return setErr(p.kind === "quality" ? "Enter the quality name." : p.kind === "mine" ? "Enter the mine name." : p.kind === "godown" ? "Enter the godown name." : "Company or firm name is needed.");
     if (!simple && !p.intl && p.gstin && !g.ok) return setErr("Fix the GSTIN or leave it blank.");
     if (p.intl && !p.country?.trim()) return setErr("Enter the country.");
     const mines = (p.mines ?? []).map((m) => m.trim()).filter(Boolean);
@@ -129,8 +137,11 @@ export function PartyForm({ initial, onSave, onDelete, onClose, inUse, can }: { 
     return (
       <Drawer open title={initial.id ? p.company || "Edit" : `New ${who}`} onClose={onClose} footer={footer}>
         <Grid>
-          <F label={p.kind === "quality" ? "Quality name *" : "Mine name *"} span={2}><TextIn value={p.company} onChange={(v) => set("company", v)} placeholder={p.kind === "quality" ? "Makrana Albeta" : "Morwad quarry, Rajsamand"} /></F>
-          {p.kind === "quality" ? (
+          <F label={p.kind === "quality" ? "Quality name *" : p.kind === "godown" ? "Godown name *" : "Mine name *"} span={2}><TextIn value={p.company} onChange={(v) => set("company", v)} placeholder={p.kind === "quality" ? "Makrana Albeta" : p.kind === "godown" ? "Main yard" : "Morwad quarry, Rajsamand"} /></F>
+          {p.kind === "godown" ? <>
+            <F label="Address"><TextIn value={p.billing} onChange={(v) => set("billing", v)} placeholder="Plot 14, RIICO Phase II" /></F>
+            <F label="Place"><TextIn value={p.city} onChange={(v) => set("city", v)} placeholder="Kishangarh" /></F>
+          </> : p.kind === "quality" ? (
             <F label="Stone"><Sel value={p.stoneType ?? "marble"} onChange={(v) => set("stoneType", v as Party["stoneType"])} options={STONES.map((v) => ({ v, l: v[0].toUpperCase() + v.slice(1) }))} /></F>
           ) : <>
             <F label="Lease / quarry licence no."><TextIn value={p.leaseNo ?? ""} onChange={(v) => set("leaseNo", v)} upper placeholder="ML 41/2009" /></F>

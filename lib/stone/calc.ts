@@ -200,20 +200,25 @@ export function mineCostTotal(costs: MineCost[]) {
 
 // ─── Optional clean-up of settled data ───
 
-export const PURGE_DEFAULT = { enabled: false, after: "days" as const, days: 90, stock: false };
+export const PURGE_DEFAULT = { enabled: false, after: "days" as const, days: 90 };
 
 /** What the clean-up rule would remove right now. */
 export function purgePlan(db: StoneDB, rule = db.settings.purge ?? PURGE_DEFAULT) {
   // "paid" clears an invoice as soon as it is marked received; the sales screen asks before marking it.
   const sales = db.sales.filter((s) => s.paid && (rule.after === "paid" || daysSince(s.paidOn || s.date) >= rule.days));
   const goneSales = new Set(sales.map((s) => s.id));
-  const stillBilled = new Set(db.sales.filter((s) => !goneSales.has(s.id)).flatMap((s) => s.lines.map((l) => l.lotId)));
-  const lots = rule.stock ? db.lots.filter((l) => l.available <= 0 && !stillBilled.has(l.id)) : [];
+  const left = db.sales.filter((s) => !goneSales.has(s.id));
+  const stillBilled = new Set(left.flatMap((s) => s.lines.map((l) => l.lotId)));
+  const blockBilled = new Set(left.flatMap((s) => s.lines.map((l) => l.blockId ?? "")));
+  // The whole trail goes with the invoices: sold-out lots, then the block, its processing and purchase line once its last lot is gone.
+  const lots = db.lots.filter((l) => l.available <= 0 && !stillBilled.has(l.id));
   const goneLots = new Set(lots.map((l) => l.id));
-  // A block cut into several lots keeps its sawing record until the last of those lots goes.
-  const keptLotBlocks = new Set(db.lots.filter((l) => !goneLots.has(l.id)).map((l) => l.blockId));
-  const jobs = db.jobs.filter((j) => goneLots.has(j.lotId) && !keptLotBlocks.has(j.blockId));
-  const blocks = db.blocks.filter((b) => b.status === "sawn" && jobs.some((j) => j.blockId === b.id) && !keptLotBlocks.has(b.id));
+  const keptLotBlocks = new Set(db.lots.filter((l) => !goneLots.has(l.id)).flatMap((l) => [l.blockId, ...(l.slabs ?? []).map((x) => x.blockId)]));
+  const blocks = db.blocks.filter((b) =>
+    (b.status === "processed" && !keptLotBlocks.has(b.id) && db.lots.some((l) => goneLots.has(l.id) && (l.blockId === b.id || l.slabs?.some((x) => x.blockId === b.id))))
+    || (b.status === "sold" && !blockBilled.has(b.id) && sales.some((s) => s.lines.some((l) => l.blockId === b.id))));
+  const goneBlocks = new Set(blocks.map((b) => b.id));
+  const jobs = db.jobs.filter((j) => goneBlocks.has(j.blockId));
   return { sales, lots, jobs, blocks };
 }
 
@@ -222,7 +227,7 @@ export function applyPurge(db: StoneDB) {
   const rule = db.settings.purge;
   if (!rule?.enabled) return false;
   const p = purgePlan(db, rule);
-  if (!p.sales.length && !p.lots.length) return false;
+  if (!p.sales.length && !p.lots.length && !p.blocks.length) return false;
   const ids = (xs: { id: string }[]) => new Set(xs.map((x) => x.id));
   const s = ids(p.sales), l = ids(p.lots), j = ids(p.jobs), b = ids(p.blocks);
   db.sales = db.sales.filter((x) => !s.has(x.id));

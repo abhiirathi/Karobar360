@@ -4,6 +4,7 @@ import { ArrowRightLeft } from "lucide-react";
 import { blockCost, n0, rs, today } from "@/lib/stone/calc";
 import { firmOf, kindLabel, transfer } from "@/lib/stone/firms";
 import type { Block, SlabLot } from "@/lib/stone/types";
+import { godowns } from "@/lib/stone/godowns";
 import type { Ctx } from "./StoneApp";
 import { Drawer, F, Grid, Note, NumIn, Sel, TextIn } from "./ui";
 
@@ -20,6 +21,8 @@ export default function TransferForm({ ctx, item, kind, onClose }: { ctx: Ctx; i
   const [value, setValue] = useState(() => Math.round(kind === "block" ? blockCost(item as Block) : (item as SlabLot).cost));
   const [vehicle, setVehicle] = useState("");
   const [note, setNote] = useState("");
+  const gds = godowns(ctx.root);
+  const [godown, setGodown] = useState(gds[0] ?? "");
   const name = kind === "block" ? `block ${(item as Block).no}` : `lot ${(item as SlabLot).lotNo}`;
   const dest = ctx.firms.find((f) => f.id === to);
 
@@ -30,7 +33,8 @@ export default function TransferForm({ ctx, item, kind, onClose }: { ctx: Ctx; i
       transfer(x, d.settings, { date, to, doc: doc.trim(), value: ctx.costs ? value : 0, note: [vehicle && `vehicle ${vehicle.toUpperCase()}`, note].filter(Boolean).join(" · ") });
       if (kind === "block") {
         const b = x as Block;
-        if (b.status === "at_mine") b.status = "in_transit";
+        // At the receiving firm it lies in a godown, unless that firm is a quarry too.
+        if (dest && !dest.modules.quarry && (b.status === "at_mine" || b.status === "godown")) { b.status = "godown"; b.godown = godown; if (!b.receivedOn) b.receivedOn = date; }
         if (vehicle) b.vehicleNo = vehicle.toUpperCase();
       } else {
         const l = x as SlabLot;
@@ -50,6 +54,7 @@ export default function TransferForm({ ctx, item, kind, onClose }: { ctx: Ctx; i
           <F label="Date"><TextIn type="date" value={date} onChange={setDate} /></F>
           <F label="Challan / invoice no." hint="The document that goes with the goods"><TextIn value={doc} onChange={setDoc} upper /></F>
           {ctx.costs && <F label="Transfer value" hint={kind === "block" ? `Block cost so far ${rs(blockCost(item as Block))}` : `Lot cost ${rs((item as SlabLot).cost)} · ${n0((item as SlabLot).available)} sq ft`}><NumIn value={value} onChange={setValue} suffix="₹" /></F>}
+          {kind === "block" && dest && !dest.modules.quarry && <F label="Into godown" hint={gds.length ? undefined : "Add godowns under Masters → Godowns"}><Sel value={godown} onChange={setGodown} placeholder="Choose godown" options={gds.map((g) => ({ v: g, l: g }))} /></F>}
           <F label="Vehicle no."><TextIn value={vehicle} onChange={setVehicle} upper placeholder="RJ 01 GA 4417" /></F>
           <F label="Note" span={2}><TextIn value={note} onChange={setNote} placeholder="Sent for sawing on gang saw 2" /></F>
         </Grid>

@@ -6,12 +6,13 @@ import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useStone, type StoneMode } from "@/lib/stone/store";
 import { level, roleLabel, type AreaKey, type Level, type Me, type Perms } from "@/lib/stone/perm";
-import { hasBlocks, modulesOf } from "@/lib/stone/modules";
+import { hasBlocks, jobOnly, modulesOf } from "@/lib/stone/modules";
 import type { Firm, Modules, PartyKind, StoneDB } from "@/lib/stone/types";
 import { kindLabel, orderedFirms, scope, tagNew } from "@/lib/stone/firms";
 import Overview from "./Overview";
 import Inventory from "./Inventory";
 import Unit from "./Unit";
+import JobWork from "./JobWork";
 import Depot from "./Depot";
 import StoresView from "./Stores";
 import Labour from "./Labour";
@@ -60,10 +61,11 @@ export function masterKinds(mods: Modules): NavChild[] {
   const buys = mods.buyBlocks || mods.imports || mods.processing || mods.trading || mods.depot;
   return [
     { sub: "customer", label: "Customers", show: true },
-    { sub: "supplier", label: "Suppliers", show: buys },
+    { sub: "supplier", label: "Suppliers", show: buys && !jobOnly(mods) },
     { sub: "vendor", label: "Vendors", show: true },
     { sub: "transporter", label: "Transporters", show: true },
     { sub: "quality", label: "Quality", show: buys },
+    { sub: "godown", label: "Godowns", show: (mods.buyBlocks || mods.processing || mods.imports) && !jobOnly(mods) },
     { sub: "mine", label: "Mines", show: mods.quarry },
   ];
 }
@@ -72,15 +74,19 @@ export function navFor(mods: Modules, can: (a: AreaKey) => Level, perms: Perms):
   const v = (a: AreaKey) => can(a) !== "none";
   const blocksOn = (hasBlocks(mods) && (v("blocks") || v("processing"))) || (mods.quarry && v("quarry"));
   const slabsOn = (mods.depot || mods.trading || mods.processing || mods.imports) && (v("stock") || v("processing") || v("sales"));
-  const buyOn = ((mods.buyBlocks || mods.imports || mods.processing) && v("blocks")) || ((mods.trading || mods.depot) && v("stock"));
+  const buyOn = !jobOnly(mods) && (((mods.buyBlocks || mods.imports || mods.processing) && v("blocks")) || ((mods.trading || mods.depot) && v("stock")));
+  const floorOn = v("blocks") || v("processing");
+  const jobOn = !!mods.jobwork && v("jobwork");
+  // A unit that also does job work opens into its floor and its job orders
+  const unitKids = mods.jobwork ? [{ sub: "floor", label: "Production floor", show: floorOn }, { sub: "jobwork", label: "Job work", show: jobOn }] : undefined;
   return [
     { key: "overview", label: "Overview", icon: LayoutDashboard, show: true },
-    { key: "inventory", label: "Inventory", icon: Boxes, show: blocksOn || slabsOn, children: [{ sub: "blocks", label: "Blocks", show: blocksOn }, { sub: "slabs", label: "Slabs", show: slabsOn }] },
-    { key: "unit", label: "Manufacturing unit", icon: Factory, show: mods.processing && (v("blocks") || v("processing")) },
+    { key: "inventory", label: "Inventory", icon: Boxes, show: (blocksOn || slabsOn) && !jobOnly(mods), children: [{ sub: "blocks", label: "Blocks", show: blocksOn }, { sub: "slabs", label: "Slabs", show: slabsOn }] },
+    { key: "unit", label: "Manufacturing unit", icon: Factory, show: mods.processing && (floorOn || jobOn), children: unitKids },
     { key: "stores", label: "Stores", icon: Package, show: mods.stores && v("stores") },
     { key: "labour", label: "Labour", icon: HardHat, show: v("labour") && (mods.processing || mods.quarry || mods.stores) },
     { key: "purchases", label: "Purchases", icon: ShoppingCart, show: buyOn },
-    { key: "sales", label: "Sales", icon: ReceiptText, show: v("sales") },
+    { key: "sales", label: "Sales", icon: ReceiptText, show: v("sales") && !jobOnly(mods) },
     { key: "parties", label: "Masters", icon: Users, show: v("parties"), children: masterKinds(mods) },
     { key: "tally", label: "Tally", icon: BookOpenCheck, show: v("tally") },
     { key: "team", label: "Team", icon: UserCog, show: perms.team },
@@ -152,7 +158,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
 
   const fUpdate = (fn: (d: StoneDB) => void) => update((d) => {
     if (!firm) { fn(d); return; }
-    const before = { ...d, blocks: [...d.blocks], lots: [...d.lots], sales: [...d.sales], mineCosts: [...d.mineCosts], jobs: [...d.jobs], shipments: [...d.shipments], damages: [...d.damages], labour: [...(d.labour ?? [])] };
+    const before = { ...d, blocks: [...d.blocks], lots: [...d.lots], sales: [...d.sales], mineCosts: [...d.mineCosts], jobs: [...d.jobs], shipments: [...d.shipments], damages: [...d.damages], jobwork: [...(d.jobwork ?? [])], labour: [...(d.labour ?? [])] };
     fn(d);
     tagNew(before, d, firm.id);
   });
@@ -162,7 +168,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
   const current = nav.find((n) => n.key === shown);
   const kids = (n: NavItem) => (n.children ?? []).filter((c) => c.show);
   // A section with sub-items shows the one asked for, else its first; inner tabs (Extraction costs) belong to Blocks.
-  const child = current?.children ? kids(current).find((c) => c.sub === sub) ?? (current.key === "inventory" && ["costs", "pertonne"].includes(sub) ? kids(current).find((c) => c.sub === "blocks") : undefined) ?? kids(current)[0] : undefined;
+  const child = current?.children ? kids(current).find((c) => c.sub === sub.split(":")[0]) ?? (current.key === "inventory" && ["costs", "pertonne"].includes(sub) ? kids(current).find((c) => c.sub === "blocks") : undefined) ?? kids(current)[0] : undefined;
   const childSub = child?.sub ?? "";
 
   return (
@@ -255,7 +261,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
         {saveError && mode === "demo" && <div className="no-print mb-4 rounded-full bg-neg-soft px-3 py-1 text-sm text-neg">Browser storage is full. Remove photos or export a backup.</div>}
         {shown === "overview" && <Overview ctx={ctx} />}
         {shown === "inventory" && <Inventory ctx={ctx} page={childSub === "slabs" ? "slabs" : "blocks"} key={sub || childSub} />}
-        {shown === "unit" && <Unit ctx={ctx} />}
+        {shown === "unit" && (childSub === "jobwork" ? <JobWork ctx={ctx} key={navN} /> : <Unit ctx={ctx} />)}
         {shown === "stores" && <StoresView ctx={ctx} />}
         {shown === "labour" && <Labour ctx={ctx} />}
         {shown === "purchases" && <Purchases ctx={ctx} key={navN} />}

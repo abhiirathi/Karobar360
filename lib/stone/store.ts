@@ -4,8 +4,9 @@ import { applyPurge } from "./calc";
 import { DEFAULT_SETTINGS, seed, seedLabour } from "./seed";
 import { ALL_SECTIONS, permsOf, type Me, type Perms, type Section } from "./perm";
 import type { StoneDB } from "./types";
+import { migrateBlocks } from "./godowns";
 
-const KEY = "karobar360.stone.v4"; // v4: masters, purchases by bill and stores cost per sq ft in the sample company
+const KEY = "karobar360.stone.v6"; // v6: godowns, processing and lots in the sample company
 export type StoneMode = "demo" | "cloud";
 export type Status = "loading" | "ready" | "signedout" | "error";
 
@@ -15,7 +16,8 @@ function loadLocal(): StoneDB {
     if (raw) {
       const db = JSON.parse(raw) as StoneDB;
       if (db && db.v === 1) {
-        if (applyPurge(db)) saveLocal(db);
+        const moved = migrateBlocks(db);
+        if (applyPurge(db) || moved) saveLocal(db);
         // Sample company saved before the labour page existed: add its workers.
         if (!db.labour) { db.labour = seedLabour(db.settings); saveLocal(db); }
         return db;
@@ -34,7 +36,7 @@ function saveLocal(db: StoneDB) {
   }
 }
 
-const EMPTY = { parties: [], blocks: [], mineCosts: [], jobs: [], lots: [], damages: [], shipments: [], sales: [], stores: { items: [], moves: [] }, tally: undefined };
+const EMPTY = { parties: [], blocks: [], mineCosts: [], jobs: [], lots: [], damages: [], shipments: [], sales: [], jobwork: [], stores: { items: [], moves: [] }, tally: undefined };
 
 type Payload = { me: Me; sections: Record<string, { data: unknown; version: number }>; read: Section[]; write: Section[] };
 
@@ -45,7 +47,7 @@ function build(p: Payload): StoneDB {
     v: 1,
     settings: { ...DEFAULT_SETTINGS, ownMines: [], ...((s.settings?.data as object) ?? { company: p.me.orgName }) },
     parties: arr("parties"), blocks: arr("blocks"), mineCosts: arr("mineCosts"), jobs: arr("jobs"), lots: arr("lots"),
-    damages: arr("damages"), shipments: arr("shipments"), sales: arr("sales"),
+    damages: arr("damages"), shipments: arr("shipments"), sales: arr("sales"), jobwork: arr("jobwork"),
     tally: (s.tally?.data as StoneDB["tally"]) ?? undefined,
     tallyCfg: (s.tallyCfg?.data as StoneDB["tallyCfg"]) ?? undefined,
     stores: (s.stores?.data as StoneDB["stores"]) ?? undefined,
@@ -82,7 +84,9 @@ export function useStone(mode: StoneMode) {
     versions.current = Object.fromEntries(Object.entries(p.sections).map(([k, v]) => [k, v.version]));
     access.current = { read: new Set(p.read), write: new Set(p.write) };
     setMe(p.me);
-    return build(p);
+    const d = build(p);
+    migrateBlocks(d);
+    return d;
   }, []);
 
   useEffect(() => {

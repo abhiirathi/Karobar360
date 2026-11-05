@@ -6,6 +6,8 @@ import type { Ctx } from "./StoneApp";
 import { MODULE_INFO, hasBlocks, modulesOf } from "@/lib/stone/modules";
 import { F, Grid, Note, NumIn, Section, Sel, TextIn } from "./ui";
 import FirmsSettings from "./Firms";
+import { jobSettings } from "@/lib/stone/jobwork";
+import type { JobSettings } from "@/lib/stone/types";
 import { WeighbridgeSettings } from "./Weigh";
 
 export default function SettingsView({ ctx }: { ctx: Ctx }) {
@@ -105,6 +107,7 @@ export default function SettingsView({ ctx }: { ctx: Ctx }) {
           <F label="Labour"><NumIn value={s.labourPerSqft} onChange={(v) => set("labourPerSqft", v)} suffix="₹/sq ft" /></F>
         </Grid>
       </Section>}
+      {M.jobwork && <JobDefaults s={s} onChange={(j) => set("jobwork", j)} />}
       {canEdit && hasBlocks(M) && <WeighbridgeSettings ctx={ctx} />}
       {owner && <Cleanup s={s} db={db} onChange={(p) => set("purge", p)} />}
       <div className="mt-6 flex flex-wrap items-center gap-2">
@@ -150,20 +153,31 @@ function Cleanup({ s, db, onChange }: { s: StoneSettings; db: StoneDB; onChange:
             </div>
             {preset === "custom" && <div className="mt-2 w-44"><NumIn value={p.days} onChange={(v) => onChange({ ...p, days: Math.max(1, Math.round(v)) })} suffix="days" /></div>}
           </div>
-          <label className="flex items-start gap-3">
-            <input type="checkbox" className="mt-1 h-4 w-4 accent-[var(--accent)]" checked={p.stock} onChange={(e) => onChange({ ...p, stock: e.target.checked })} />
-            <span>
-              <span className="block font-medium">Also clear sold-out stock</span>
-              <span className="block text-[0.86rem] text-ink-2">Removes slab lots with nothing left, and the block and sawing records behind them, once their invoices are gone. Yield and cost history for those blocks goes too.</span>
-            </span>
-          </label>
+          <p className="text-[0.86rem] text-ink-2">The whole trail goes with the invoice: a sold-out lot and its slabs, and once a block's last lot is gone, the block itself with its purchase line, processing record and transfers. A block sold without processing goes with its invoice. Yield and cost history for those blocks goes too.</p>
           <Note tone={plan.sales.length ? "warn" : "plain"}>
             {plan.sales.length
-              ? <>With this rule, {plan.sales.length} paid invoice{plan.sales.length > 1 ? "s" : ""}{p.stock && plan.lots.length ? ` and ${plan.lots.length} sold-out lot${plan.lots.length > 1 ? "s" : ""}` : ""} would be deleted when you save. Deleted data can’t be brought back, so download a backup first if you may need it.</>
+              ? <>With this rule, {plan.sales.length} paid invoice{plan.sales.length > 1 ? "s" : ""}{plan.lots.length ? `, ${plan.lots.length} sold-out lot${plan.lots.length > 1 ? "s" : ""}` : ""}{plan.blocks.length ? ` and ${plan.blocks.length} block${plan.blocks.length > 1 ? "s" : ""}` : ""} would be deleted when you save. Deleted data can’t be brought back, so download a backup first if you may need it.</>
               : p.after === "paid" ? "No invoice is marked received right now. Each one will be deleted the moment you mark its payment received." : `No invoice has been paid for ${p.days} days yet. Paid invoices will be cleared as they reach it.`}
           </Note>
         </div>
       </div>
+    </Section>
+  );
+}
+
+/** What every new job order starts with. Each order can change them. */
+function JobDefaults({ s, onChange }: { s: StoneSettings; onChange: (j: JobSettings) => void }) {
+  const j = jobSettings(s);
+  const set = <K extends keyof JobSettings>(k: K, v: JobSettings[K]) => onChange({ ...j, [k]: v });
+  return (
+    <Section title="Job work (filled into each new job order)">
+      <Grid cols={3}>
+        <F label="Cutting rate" hint="Per sq ft of good slabs"><NumIn value={j.rate} onChange={(v) => set("rate", v)} suffix="₹/sq ft" /></F>
+        <F label="GST on job work bills"><NumIn value={j.gstRate} onChange={(v) => set("gstRate", v)} suffix="%" /></F>
+        <F label="SAC" hint="Printed on job work bills"><TextIn value={j.sac} onChange={(v) => set("sac", v)} /></F>
+        <F label="Free days at the unit"><NumIn value={j.freeDays} onChange={(v) => set("freeDays", v)} suffix="days" /></F>
+        <F label="Yard rent after that" hint="0 = no rent"><NumIn value={j.rentPerDay} onChange={(v) => set("rentPerDay", v)} suffix="₹/block/day" /></F>
+      </Grid>
     </Section>
   );
 }
