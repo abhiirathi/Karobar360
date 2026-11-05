@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowRightLeft, Camera, ChevronDown, Download, Plus, Printer, Trash2 } from "lucide-react";
 import { STATES, blockCost, checkGstin, daysSince, dmy, inWords, lakh, n0, n2, rs, rs2, saleCost, saleTaxable, saleTotals, today, uid } from "@/lib/stone/calc";
 import { lotUnit, qualities } from "@/lib/stone/costing";
+import { inStock } from "@/lib/stone/godowns";
 import { PORTS, checks, eInvoice, eWayBill } from "@/lib/stone/gst";
 import type { Block, Party, Sale, SaleLine, SlabLot, StoneDB } from "@/lib/stone/types";
 import { slabCount, slabRange, syncLot } from "@/lib/stone/slabs";
@@ -199,7 +200,7 @@ export function BuyForm({ ctx, onClose }: { ctx: Ctx; onClose: () => void }) {
 }
 
 function release(d: StoneDB, l: SaleLine) {
-  if (l.blockId) { const b = d.blocks.find((x) => x.id === l.blockId); if (b && b.status === "sold") b.status = b.receivedOn ? "in_yard" : "at_mine"; return; }
+  if (l.blockId) { const b = d.blocks.find((x) => x.id === l.blockId); if (b && b.status === "sold") b.status = b.source === "own_mine" && !b.godown ? "at_mine" : "godown"; return; }
   const lot = d.lots.find((x) => x.id === l.lotId);
   if (!lot) return;
   if (l.slabIds && lot.slabs?.length) { for (const x of lot.slabs) if (l.slabIds.includes(x.id) && x.status === "sold") { x.status = "stock"; delete x.saleId; } syncLot(lot); }
@@ -246,7 +247,7 @@ function SaleForm({ ctx, initial, onClose, onSaved }: { ctx: Ctx; initial: Sale 
   const nextNo = `${db.settings.invoicePrefix}${String(212 + db.sales.length).padStart(4, "0")}`;
   const [s, setS] = useState<Sale>(() => initial ? structuredClone(initial) : { id: "", invoiceNo: nextNo, date: today(), customerId: "", lines: [], freight: 0, vehicleNo: "", ewayBill: "", gstRate: 18, hsn: "6802", paid: false, notes: "" });
   const lotsAvail = db.lots.filter((l) => l.available > 0 || s.lines.some((x) => x.lotId === l.id));
-  const blocksAvail = db.blocks.filter((b) => ["at_mine", "in_yard", "in_transit"].includes(b.status) || s.lines.some((x) => x.blockId === b.id));
+  const blocksAvail = db.blocks.filter((b) => inStock(b) || s.lines.some((x) => x.blockId === b.id));
   const sellBlocks = ctx.mods.quarry || ctx.mods.buyBlocks || ctx.mods.imports;
   const orig = useMemo(() => Object.fromEntries((initial?.lines ?? []).filter((l) => l.lotId).map((l) => [l.lotId, l.sqft])), [initial]);
   const avail = (id: string) => (db.lots.find((l) => l.id === id)?.available ?? 0) + (orig[id] ?? 0);

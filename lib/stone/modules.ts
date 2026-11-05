@@ -1,11 +1,12 @@
 import type { Modules, StoneDB, StoneSettings, TallySettings } from "./types";
 
-export const ALL_MODULES: Modules = { stores: true, quarry: true, buyBlocks: true, processing: true, imports: true, exports: true, trading: true, depot: true };
+export const ALL_MODULES: Modules = { stores: true, quarry: true, buyBlocks: true, processing: true, imports: true, exports: true, trading: true, depot: true, jobwork: false };
 
 export const MODULE_INFO: { key: keyof Modules; label: string; hint: string }[] = [
   { key: "quarry", label: "We run our own quarry", hint: "Blocks extracted, dispatch, e-Rawanna, diesel, wire and labour per tonne" },
   { key: "buyBlocks", label: "We buy blocks", hint: "From quarries and block traders: rate, royalty, freight, weighbridge" },
   { key: "processing", label: "We have a manufacturing unit", hint: "Gang saw, cutter or resin line: yield, cost per sq ft, damage" },
+  { key: "jobwork", label: "We cut customers' blocks (job work)", hint: "Customer's own block in, slabs back, cutting charged per sq ft" },
   { key: "imports", label: "We import blocks or slabs", hint: "Italy, Turkey, Brazil, Greece, China: BL, landed cost, free days" },
   { key: "exports", label: "We export", hint: "Shipments out, shipping bill, containers" },
   { key: "trading", label: "We buy slabs to resell", hint: "Slab purchases from other units and importers" },
@@ -17,6 +18,7 @@ export const BUSINESS_PRESETS: { key: string; label: string; blurb: string; m: P
   { key: "distributor", label: "Distributor / trader", blurb: "Buys slabs, sells from a depot", m: { trading: true, depot: true } },
   { key: "importer", label: "Importer", blurb: "Imports blocks or slabs and sells them", m: { imports: true, trading: true, depot: true } },
   { key: "processor", label: "Manufacturing unit", blurb: "Buys blocks, saws, sells slabs", m: { buyBlocks: true, processing: true, depot: true, stores: true } },
+  { key: "jobwork", label: "Job work unit", blurb: "Cuts customers' blocks for a charge", m: { processing: true, jobwork: true, stores: true } },
   { key: "quarry", label: "Quarry owner", blurb: "Extracts and sells blocks", m: { quarry: true, stores: true } },
   { key: "integrated", label: "Quarry + unit + depot", blurb: "Every stage, mine to sale", m: { quarry: true, buyBlocks: true, processing: true, imports: true, depot: true, stores: true } },
 ];
@@ -26,8 +28,11 @@ export function modulesOf(s: StoneSettings | undefined): Modules {
 }
 
 export function presetModules(m: Partial<Modules>): Modules {
-  return { stores: false, quarry: false, buyBlocks: false, processing: false, imports: false, exports: false, trading: false, depot: false, ...m };
+  return { stores: false, quarry: false, buyBlocks: false, processing: false, imports: false, exports: false, trading: false, depot: false, jobwork: false, ...m };
 }
+
+/** A unit that only cuts other people's blocks: no stock of its own to buy, hold or sell. */
+export const jobOnly = (m: Modules) => !!m.jobwork && !m.quarry && !m.buyBlocks && !m.imports && !m.trading && !m.depot;
 
 /** Rough blocks exist in the business (own, bought or imported). */
 export const hasBlocks = (m: Modules) => m.quarry || m.buyBlocks || m.processing || m.imports;
