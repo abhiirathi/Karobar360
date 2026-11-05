@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BookOpenCheck, Building2, LifeBuoy, Factory, ReceiptText, Route, LayoutDashboard, LogOut, Mountain, Package, Settings, Ship, UserCog, Users, Warehouse } from "lucide-react";
+import { BookOpenCheck, Building2, Check, ChevronsUpDown, LifeBuoy, Factory, ReceiptText, Route, LayoutDashboard, LogOut, Mountain, Package, Settings, Ship, UserCog, Users, Warehouse } from "lucide-react";
 import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useStone, type StoneMode } from "@/lib/stone/store";
@@ -139,27 +139,15 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
             {mode === "cloud" && <button onClick={signOut} className="btn btn-quiet btn-sm" aria-label="Sign out"><LogOut size={14} /></button>}
           </div>
         </div>
-        <div className="hidden px-5 pb-2 pt-3 lg:block">
-          <div className="text-[0.78rem] font-medium uppercase tracking-wide text-ink-3">Natural stones</div>
-          <div className="mt-1 font-semibold leading-tight">{firm ? firm.name : db.settings.company || me?.orgName}</div>
-          <div className="text-sm text-ink-2">{firm ? kindLabel(firm.kind) : firms.length > 1 ? `Group · ${firms.length} firms` : db.settings.city}</div>
-        </div>
         {firms.length > 1 ? (
-          <div className="px-4 pb-2 pt-1 lg:px-5">
-            <label className="relative block">
-              <span className="mb-1 hidden text-[0.75rem] font-medium text-ink-3 lg:block">Working in</span>
-              <span className="relative block">
-                <Building2 size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
-                <select className="field !pl-9 text-[0.9rem] font-medium" value={firm?.id ?? ""} onChange={(e) => { setFirm(e.target.value || null); go("overview"); }}>
-                  <option value="">All firms · group view</option>
-                  {firms.map((f) => <option key={f.id} value={f.id}>{f.name} · {kindLabel(f.kind)}</option>)}
-                </select>
-              </span>
-            </label>
+          <div className="px-3 pb-2 pt-1 lg:px-3 lg:pt-3">
+            <FirmSwitcher firms={firms} firm={firm} onPick={(id) => { setFirm(id); go("overview"); }} />
           </div>
-        ) : canFirms && (
-          <div className="hidden px-5 pb-1 lg:block">
-            <button onClick={() => go("settings", "firms")} className="inline-flex items-center gap-1.5 text-[0.82rem] font-medium text-accent hover:underline"><Building2 size={14} />Add another firm</button>
+        ) : (
+          <div className="hidden px-5 pb-2 pt-3 lg:block">
+            <div className="font-semibold leading-tight">{db.settings.company || me?.orgName}</div>
+            <div className="text-sm text-ink-3">{db.settings.city || "Natural stones"}</div>
+            {canFirms && <button onClick={() => go("settings", "firms")} className="mt-2 inline-flex items-center gap-1.5 text-[0.82rem] font-medium text-accent hover:underline"><Building2 size={14} />Add another firm</button>}
           </div>
         )}
         <nav className="scroll-thin flex gap-1 overflow-x-auto px-3 pb-3 lg:mt-2 lg:flex-col lg:overflow-visible lg:px-3" aria-label="Sections">
@@ -228,3 +216,52 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
 }
 
 export const blocksOn = hasBlocks;
+
+/** One control for the firm: shows where you are working, opens a short list to switch. */
+function FirmSwitcher({ firms, firm, onPick }: { firms: Firm[]; firm: Firm | null; onPick: (id: string | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", off);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", off); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  const items: { id: string | null; name: string; sub: string }[] = [{ id: null, name: "All firms", sub: `Group view · ${firms.length} firms` }, ...firms.map((f) => ({ id: f.id, name: f.name, sub: kindLabel(f.kind) }))];
+  const cur = items.find((x) => x.id === (firm?.id ?? null)) ?? items[0];
+  return (
+    <div ref={box} className="relative">
+      <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}
+        className="focusable flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-surface-2">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-2 text-ink-2"><Building2 size={17} /></span>
+        <span className="min-w-0 flex-1">
+          <span className="line-clamp-2 block font-semibold leading-tight">{cur.name}</span>
+          <span className="block truncate text-[0.8rem] text-ink-3">{cur.sub}</span>
+        </span>
+        <ChevronsUpDown size={15} className="shrink-0 text-ink-3" />
+      </button>
+      {open && (
+        <ul role="listbox" aria-label="Switch firm" className="absolute inset-x-0 z-50 mt-1 overflow-hidden rounded-2xl border border-surface-2 bg-ground p-1 shadow-xl">
+          {items.map((x) => {
+            const on = x.id === cur.id;
+            return (
+              <li key={x.id ?? "all"} role="option" aria-selected={on}>
+                <button type="button" onClick={() => { setOpen(false); if (!on) onPick(x.id); }}
+                  className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-colors ${on ? "bg-accent-soft" : "hover:bg-surface-2"}`}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[0.9rem] font-medium leading-snug">{x.name}</span>
+                    <span className="block truncate text-[0.78rem] text-ink-3">{x.sub}</span>
+                  </span>
+                  {on && <Check size={15} className="shrink-0 text-accent" />}
+                </button>
+                {x.id === null && <div className="mx-3 my-1 border-t border-surface-2" />}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
