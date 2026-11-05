@@ -5,7 +5,7 @@ import { n0, rs, uid } from "@/lib/stone/calc";
 import type { Mark, Worker } from "@/lib/stone/types";
 import type { Ctx } from "./StoneApp";
 import { Toggle } from "./Team";
-import { Area, Badge, Drawer, F, Grid, Note, NumIn, Section, Seg, Stat, Table, TextIn, type Col } from "./ui";
+import { Area, Badge, Drawer, F, Grid, Note, NumIn, Section, Seg, Table, TextIn, type Col } from "./ui";
 
 type Tab = "today" | "register" | "workers";
 
@@ -106,12 +106,13 @@ function MarkDay({ ctx, workers, can, onAdd }: { ctx: Ctx; workers: Worker[]; ca
         <span className="text-[0.88rem] text-ink-3">{longDate(date)}</span>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Present" value={n0(count("P"))} tone="good" sub={`of ${shown.length} workers`} />
-        <Stat label="Half day" value={n0(count("H"))} />
-        <Stat label="Absent" value={n0(count("A"))} tone={count("A") ? "neg" : undefined} />
-        <Stat label="Not marked" value={n0(unmarked.length)} tone={unmarked.length ? "warn" : "good"} sub={unmarked.length ? "Mark before the day ends" : "All marked"} />
+      <div className="mt-4 grid grid-cols-4 gap-2 sm:gap-3">
+        <Tally label="Present" n={count("P")} tone="text-accent" />
+        <Tally label="Half day" n={count("H")} tone="text-warn" />
+        <Tally label="Absent" n={count("A")} tone={count("A") ? "text-neg" : ""} />
+        <Tally label="Not marked" n={unmarked.length} tone={unmarked.length ? "text-warn" : "text-accent"} />
       </div>
+      <p className="mt-2 text-[0.8rem] text-ink-3">{shown.length} workers{unmarked.length ? ` · ${unmarked.length} still to mark today` : " · all marked"}</p>
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or trade" className="field max-w-xs !py-2" />
@@ -146,6 +147,15 @@ function MarkDay({ ctx, workers, can, onAdd }: { ctx: Ctx; workers: Worker[]; ca
         {!shown.length && <li className="px-4 py-6 text-center text-[0.9rem] text-ink-3">No worker matches.</li>}
       </ul>
       {can && <p className="mt-2 text-[0.8rem] text-ink-3">Tap a marked button again to clear it.</p>}
+    </div>
+  );
+}
+
+function Tally({ label, n, tone }: { label: string; n: number; tone: string }) {
+  return (
+    <div className="rounded-2xl bg-surface px-3 py-2.5 sm:px-4 sm:py-3">
+      <div className={`num text-[1.35rem] font-semibold leading-none sm:text-[1.6rem] ${tone}`}>{n0(n)}</div>
+      <div className="mt-1 truncate text-[0.74rem] text-ink-2 sm:text-[0.84rem]">{label}</div>
     </div>
   );
 }
@@ -188,18 +198,18 @@ function Register({ workers, costs }: { workers: Worker[]; costs: boolean }) {
           <thead>
             <tr className="text-ink-3">
               <th className="sticky left-0 z-10 bg-surface px-3 py-2 text-left font-medium">Worker</th>
-              {dates.map((d) => { const dow = new Date(`${d}T12:00:00`).getDay(); return <th key={d} className={`num min-w-[26px] px-0.5 py-2 text-center font-medium ${dow === 0 ? "text-ink-3/60" : ""} ${d === today ? "text-accent" : ""}`}>{Number(d.slice(8))}</th>; })}
-              <th className="px-3 py-2 text-right font-medium">Days</th>
+              <th className="px-2 py-2 text-right font-medium">Days</th>
               {costs && <th className="px-3 py-2 text-right font-medium">Wage</th>}
+              {dates.map((d) => { const dow = new Date(`${d}T12:00:00`).getDay(); return <th key={d} className={`num min-w-[26px] px-0.5 py-2 text-center font-medium ${dow === 0 ? "text-ink-3/60" : ""} ${d === today ? "text-accent" : ""}`}>{Number(d.slice(8))}</th>; })}
             </tr>
           </thead>
           <tbody>
             {rows.map((w) => (
               <tr key={w.id} className="border-t border-surface-2">
                 <td className="sticky left-0 z-10 whitespace-nowrap bg-surface px-3 py-1.5"><div className="font-medium">{w.name}</div><div className="text-[0.72rem] text-ink-3">{w.trade}</div></td>
+                <td className="num px-2 py-1.5 text-right font-semibold">{worked(w, dates)}</td>
+                {costs && <td className="num whitespace-nowrap border-r border-surface-2 px-3 py-1.5 text-right">{rs(Math.round(worked(w, dates) * dayRate(w)))}</td>}
                 {dates.map((d) => { const k = w.att?.[d]; return <td key={d} className="px-0.5 py-1.5 text-center"><span className={`num inline-grid h-6 w-6 place-items-center rounded-md text-[0.72rem] font-semibold ${k ? CELL[k] : "text-ink-3/40"}`}>{k ?? "·"}</span></td>; })}
-                <td className="num px-3 py-1.5 text-right font-semibold">{worked(w, dates)}</td>
-                {costs && <td className="num whitespace-nowrap px-3 py-1.5 text-right">{rs(Math.round(worked(w, dates) * dayRate(w)))}</td>}
               </tr>
             ))}
             {!rows.length && <tr><td colSpan={days + 3} className="px-3 py-6 text-center text-ink-3">No workers yet.</td></tr>}
