@@ -356,7 +356,19 @@ export function seed(): StoneDB {
   }
 
   void albeta1; void jal;
-  const db: StoneDB = { v: 1, settings: S, parties, blocks, mineCosts, jobs, lots, damages: [dmg], shipments, sales, stores: { items, moves } };
+  // Sample figures as the Tally connector would bring them in (demo only; a company account keeps its own Tally data).
+  const tally = {
+    syncedAt: new Date(now.getTime() - 3 * 3600000).toISOString(), company: S.company,
+    months: Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
+      const k = 0.8 + r() * 0.45;
+      return { m: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, sales: Math.round(2400000 * k), purchases: Math.round(1500000 * k * (0.9 + r() * 0.2)), expenses: Math.round(380000 * (0.9 + r() * 0.2)) };
+    }),
+    receivables: 4210000, payables: 1880000, cashBank: 1640000, gstPayable: 212000,
+    topDebtors: [{ name: "Shivam Infra Projects", amount: 1460000 }, { name: "Gupta Stone Gallery", amount: 1120000 }, { name: "Al Noor Building Materials LLC", amount: 910000 }, { name: "Krishna Interiors", amount: 410000 }, { name: "Sharma Tiles & Marble House", amount: 310000 }],
+    topCreditors: [{ name: "Makrana Marble Udyog", amount: 720000 }, { name: "Kishangarh Stone Chemicals", amount: 460000 }, { name: "Agariya Stone Supply", amount: 390000 }, { name: "Mewar Trailer Service", amount: 180000 }, { name: "Shri Balaji Roadlines", amount: 130000 }],
+  };
+  const db: StoneDB = { v: 1, settings: S, parties, blocks, mineCosts, jobs, lots, damages: [dmg], shipments, sales, stores: { items, moves }, tally };
   group(db);
   return db;
 }

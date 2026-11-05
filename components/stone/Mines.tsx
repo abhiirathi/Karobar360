@@ -34,7 +34,7 @@ export default function Mines({ ctx }: { ctx: Ctx }) {
   const { db, update } = ctx;
   const quarryOn = ctx.mods.quarry && ctx.can("quarry") !== "none";
   const boughtOn = (ctx.mods.buyBlocks || ctx.mods.processing) && ctx.can("blocks") !== "none";
-  const importOn = (ctx.mods.imports || db.blocks.some((b) => b.source === "import")) && ctx.can("blocks") !== "none";
+  const importOn = ctx.can("blocks") !== "none";
   const allowedTabs: MTab[] = [...(quarryOn ? (["quarry"] as MTab[]) : []), ...(boughtOn ? (["bought"] as MTab[]) : []), ...(importOn ? (["imported"] as MTab[]) : []), ...(quarryOn && ctx.costs ? (["costs", "pertonne"] as MTab[]) : [])];
   const [tabRaw, setTab] = useState<MTab>((ctx.sub as MTab) || allowedTabs[0] || "bought");
   const tab: MTab = allowedTabs.includes(tabRaw) ? tabRaw : allowedTabs[0] ?? "bought";

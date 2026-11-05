@@ -21,6 +21,7 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
   const { db, go } = ctx;
   const S = db.settings;
   const [custom, setCustom] = useState(false);
+  const [sure, setSure] = useState(false);
   const b = db.blocks;
   const sum = (xs: typeof b) => xs.reduce((a, x) => a + (x.tonnes || x.billedTonnes), 0);
   const atMine = b.filter((x) => x.status === "at_mine");
@@ -274,8 +275,23 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
     else rows.push(<div key={k}>{W_[k]}</div>);
   }
 
+  const owner = ctx.mode === "demo" || !!ctx.me?.isOwner;
+  const fewRecords = ctx.root.blocks.length + ctx.root.sales.length + ctx.root.lots.length < 3;
+  const anyRecords = ctx.root.blocks.length + ctx.root.sales.length + ctx.root.parties.length > 0;
   return (
     <div className="space-y-4">
+      {owner && fewRecords && (
+        <div className="no-print flex flex-wrap items-center gap-4 rounded-[22px] bg-accent-soft p-5">
+          <div className="min-w-[240px] flex-1">
+            <div className="font-semibold">New here? See every section filled in.</div>
+            <p className="mt-0.5 text-[0.9rem] text-ink-2">{sure ? "Sample data replaces the few records here. Your company name and team stay." : "Load a sample stone business to try the tool, or read the step-by-step guide first."}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn btn-primary" onClick={() => { if (anyRecords && !sure) { setSure(true); return; } setSure(false); ctx.reset(false); ctx.say("Sample data loaded in every section", "good"); }}>{sure ? "Yes, load sample data" : "Load sample data"}</button>
+            <button className="btn btn-quiet" onClick={() => go("help")}>How to use</button>
+          </div>
+        </div>
+      )}
       {ctx.edit("settings") && (
         <div className="no-print flex justify-end">
           <button className="btn btn-quiet btn-sm" onClick={() => setCustom(true)}><SlidersHorizontal size={14} />Customise dashboard</button>

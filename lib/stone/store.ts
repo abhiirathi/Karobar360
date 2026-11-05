@@ -5,7 +5,7 @@ import { DEFAULT_SETTINGS, seed } from "./seed";
 import { ALL_SECTIONS, permsOf, type Me, type Perms, type Section } from "./perm";
 import type { StoneDB } from "./types";
 
-const KEY = "karobar360.stone.v2"; // v2: slabs, firms and exports in the sample company
+const KEY = "karobar360.stone.v3"; // v3: slabs, firms, exports and Tally figures in the sample company
 export type StoneMode = "demo" | "cloud";
 export type Status = "loading" | "ready" | "signedout" | "error";
 
@@ -32,7 +32,7 @@ function saveLocal(db: StoneDB) {
   }
 }
 
-const EMPTY = { parties: [], blocks: [], mineCosts: [], jobs: [], lots: [], damages: [], shipments: [], sales: [], stores: { items: [], moves: [] } };
+const EMPTY = { parties: [], blocks: [], mineCosts: [], jobs: [], lots: [], damages: [], shipments: [], sales: [], stores: { items: [], moves: [] }, tally: undefined };
 
 type Payload = { me: Me; sections: Record<string, { data: unknown; version: number }>; read: Section[]; write: Section[] };
 
@@ -168,7 +168,7 @@ export function useStone(mode: StoneMode) {
     const fresh = seed();
     const cur = dbRef.current;
     if (mode === "demo") {
-      const next: StoneDB = empty ? { ...fresh, ...EMPTY } : fresh;
+      const next: StoneDB = empty ? { ...fresh, ...EMPTY, settings: { ...fresh.settings, firms: [] } } : fresh;
       saveLocal(next);
       set(next);
       return;

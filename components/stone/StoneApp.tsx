@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BookOpenCheck, Building2, Factory, ReceiptText, Route, LayoutDashboard, LogOut, Mountain, Package, Settings, Ship, UserCog, Users, Warehouse } from "lucide-react";
+import { BookOpenCheck, Building2, LifeBuoy, Factory, ReceiptText, Route, LayoutDashboard, LogOut, Mountain, Package, Settings, Ship, UserCog, Users, Warehouse } from "lucide-react";
 import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useStone, type StoneMode } from "@/lib/stone/store";
@@ -22,8 +22,9 @@ import TallyView from "./TallyView";
 import Scan from "./Scan";
 import Auth from "./Auth";
 import TraceView from "./Trace";
+import Help from "./Help";
 
-export type View = "overview" | "mines" | "unit" | "stores" | "depot" | "sales" | "trade" | "parties" | "trace" | "tally" | "team" | "settings" | "scan";
+export type View = "overview" | "mines" | "unit" | "stores" | "depot" | "sales" | "trade" | "parties" | "trace" | "tally" | "team" | "settings" | "help" | "scan";
 export type Ctx = {
   db: StoneDB;
   update: (fn: (d: StoneDB) => void) => void;
@@ -63,6 +64,7 @@ export function navFor(mods: Modules, can: (a: AreaKey) => Level, perms: Perms):
     { key: "tally", label: "Tally", icon: BookOpenCheck, show: v("tally") },
     { key: "team", label: "Team", icon: UserCog, show: perms.team },
     { key: "settings", label: "Settings", icon: Settings, show: v("settings") },
+    { key: "help", label: "How to use", icon: LifeBuoy, show: true },
   ];
 }
 
@@ -212,6 +214,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
         {shown === "tally" && <TallyView ctx={ctx} />}
         {shown === "team" && <Team ctx={ctx} />}
         {shown === "settings" && <SettingsView ctx={ctx} />}
+        {shown === "help" && <Help ctx={ctx} />}
         {shown === "scan" && <Scan ctx={ctx} blockId={sub} />}
       </main>
 

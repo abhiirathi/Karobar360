@@ -11,7 +11,7 @@ export default function SettingsView({ ctx }: { ctx: Ctx }) {
   const { db, update, reset, replace } = ctx;
   const [s, setS] = useState<StoneSettings>({ ...db.settings });
   const [msg, setMsg] = useState("");
-  const [confirm, setConfirm] = useState(false);
+  const [confirm, setConfirm] = useState<false | true | "sample">(false);
   const set = <K extends keyof StoneSettings>(k: K, v: StoneSettings[K]) => setS((x) => ({ ...x, [k]: v }));
   const g = checkGstin(s.gstin);
   const firm = ctx.firm;
@@ -115,8 +115,8 @@ export default function SettingsView({ ctx }: { ctx: Ctx }) {
         <div className="mt-3 flex flex-wrap gap-2">
           <button className="btn btn-quiet btn-sm" onClick={backup}>Download backup</button>
           {owner && <><label className="btn btn-quiet btn-sm">Restore backup<input type="file" accept="application/json" className="sr-only" onChange={(e) => restore(e.target.files?.[0])} /></label>
-          <button className="btn btn-quiet btn-sm" onClick={() => { reset(false); setMsg("Sample company loaded."); }}>Load sample company</button>
-          <button className="btn btn-quiet btn-sm !text-neg" onClick={() => { if (!confirm) { setConfirm(true); setMsg("This clears every block, lot, invoice and customer here. Click again to confirm."); return; } setConfirm(false); reset(true); setMsg("Started fresh. Add your company details above."); }}>{confirm ? "Yes, clear everything" : "Start with my own data"}</button></>}
+          <button className="btn btn-quiet btn-sm" onClick={() => { if (confirm !== "sample") { setConfirm("sample"); setMsg("This replaces the blocks, lots, invoices, customers and stores here with sample ones. Click again to confirm."); return; } setConfirm(false); reset(false); setMsg("Sample data loaded in every section."); }}>{confirm === "sample" ? "Yes, load sample data" : "Load sample data"}</button>
+          <button className="btn btn-quiet btn-sm !text-neg" onClick={() => { if (confirm !== true) { setConfirm(true); setMsg("This clears every block, lot, invoice and customer here. Click again to confirm."); return; } setConfirm(false); reset(true); setMsg("Started fresh. Add your company details above."); }}>{confirm === true ? "Yes, clear everything" : "Start with my own data"}</button></>}
         </div>
       </Section>
     </div>
