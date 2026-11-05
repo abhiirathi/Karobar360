@@ -2,7 +2,8 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowRight, ArrowUp, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { blockCost, cbm, checkGstin, daysSince, freeDaysLeft, lakh, mineWindow, mipCheck, n0, n2, purchaseValue, rs, rs2, saleCost, saleTaxable, saleTotals, weightCheck } from "@/lib/stone/calc";
-import { DASH_WIDGETS, hasBlocks, tallyOf } from "@/lib/stone/modules";
+import { DASH_WIDGETS, hasBlocks, jobOnly, tallyOf } from "@/lib/stone/modules";
+import { billTotals, jobsOf, leftOf, rentDays, unbilled } from "@/lib/stone/jobwork";
 import { lotCost, lotUnit, storesAlloc } from "@/lib/stone/costing";
 import { onHand, storesOf } from "@/lib/stone/stores";
 import { slabCount } from "@/lib/stone/slabs";
@@ -26,15 +27,15 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
   const b = db.blocks;
   const sum = (xs: typeof b) => xs.reduce((a, x) => a + (x.tonnes || x.billedTonnes), 0);
   const atMine = b.filter((x) => x.status === "at_mine");
-  const transit = b.filter((x) => x.status === "in_transit");
-  const yard = b.filter((x) => x.status === "in_yard");
-  const onSaw = b.filter((x) => x.status === "on_saw");
+  const yard = b.filter((x) => x.status === "godown");
+  const onSaw = b.filter((x) => x.status === "processing");
+  const transit = yard.filter((x) => !x.tonnes); // in a godown, received weight not entered yet
   const unitLots = db.lots.filter((l) => l.site === "unit" && l.available > 0);
   const depotLots = db.lots.filter((l) => l.site === "depot" && l.available > 0);
   const soldMonth = db.sales.filter((s) => daysSince(s.date) <= 30).reduce((a, s) => a + s.lines.reduce((x, l) => x + l.sqft, 0), 0);
   const party = (id: string) => db.parties.find((p) => p.id === id);
 
-  const blockVal = [...transit, ...yard, ...onSaw].reduce((a, x) => a + blockCost(x), 0);
+  const blockVal = [...yard, ...onSaw].reduce((a, x) => a + blockCost(x), 0);
   const unit = (l: (typeof db.lots)[number]) => lotUnit(ctx.root, l);
   const slabVal = db.lots.reduce((a, l) => a + l.available * unit(l), 0);
   const mm = mineWindow(db, 30);
@@ -45,17 +46,17 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
   const alerts = useMemo(() => {
     const out: Alert[] = [];
     for (const x of b) {
-      if (x.source !== "import" && !x.eRawanna && ["in_transit", "in_yard", "on_saw"].includes(x.status)) {
+      if (x.source !== "import" && !x.eRawanna && (x.status === "godown" || x.status === "processing")) {
         out.push({ tone: "neg", text: <>Block <b>{x.no}</b> has no e-Rawanna on record. Get the copy from {party(x.supplierId)?.company ?? "the quarry"} before the stone is cut or sold.</>, go: ["unit", "yard"] });
       }
       const g = weightCheck(x);
-      if (g?.flag && x.status !== "rejected" && x.status !== "in_transit") {
+      if (g?.flag && x.status !== "written_off") {
         out.push({ tone: "warn", text: g.flag === "short"
           ? <><b>{x.no}</b> weighed {n2(x.tonnes)} t at the gate against {n2(x.billedTonnes)} t quoted ({(-g.pct * 100).toFixed(1)}% short, over the 5% limit). Debit note to {party(x.supplierId)?.company ?? "supplier"}{ctx.costs ? `: about ${rs(-g.diff * x.rate)}` : ""}.</>
           : <><b>{x.no}</b> weighed {n2(x.tonnes)} t at the gate against {n2(x.billedTonnes)} t quoted ({(g.pct * 100).toFixed(1)}% more). Check the slip and the bill.</>, go: ["unit", "weight"] });
       }
-      if (x.status === "in_yard" && x.receivedOn && daysSince(x.receivedOn) > 45) {
-        out.push({ tone: "warn", text: <><b>{x.no}</b> ({x.variety}) has waited {daysSince(x.receivedOn)} days in the yard.{ctx.costs ? ` ${lakh(blockCost(x))} is tied up in it.` : ""}</>, go: ["unit", "yard"] });
+      if (x.status === "godown" && x.receivedOn && daysSince(x.receivedOn) > 45) {
+        out.push({ tone: "warn", text: <><b>{x.no}</b> ({x.variety}) has waited {daysSince(x.receivedOn)} days in {x.godown || "the godown"}.{ctx.costs ? ` ${lakh(blockCost(x))} is tied up in it.` : ""}</>, go: ["unit", "yard"] });
       }
     }
     for (const s of db.shipments) {
@@ -76,6 +77,20 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
     const st = storesOf(db);
     const lowItems = st.items.filter((i) => i.minQty > 0 && onHand(st, i.id) <= i.minQty);
     if (lowItems.length) out.push({ tone: "warn", text: <>{lowItems.length === 1 ? <><b>{lowItems[0].name}</b> is</> : <><b>{lowItems.length} store items</b> are</>} at or below the reorder level{lowItems.length > 1 ? `: ${lowItems.slice(0, 3).map((x) => x.name).join(", ")}` : ""}.</>, go: ["stores"] });
+    for (const o of jobsOf(db)) {
+      if (o.closed) continue;
+      const cust = party(o.customerId)?.company ?? "customer";
+      for (const b of o.blocks) {
+        if ((b.status === "in_yard" || b.status === "cut") && o.freeDays > 0 && rentDays(o, b, new Date().toISOString().slice(0, 10)) > 0) out.push({ tone: "warn", text: <>{cust}’s block <b>{b.no}</b> is past its {o.freeDays} free days at the unit{o.rentPerDay ? `: yard rent of ${rs(o.rentPerDay)} a day is running` : ""}.</>, go: ["unit", `jobwork:${o.id}`] });
+        if (b.status === "cut" && b.cut && daysSince(b.cut.finishedOn) > 7 && leftOf(o, b).slabs > 0) out.push({ tone: "warn", text: <>{leftOf(o, b).slabs} slabs of {cust}’s block <b>{b.no}</b> were cut {daysSince(b.cut.finishedOn)} days ago and are still here. Ask them to collect.</>, go: ["unit", `jobwork:${o.id}`] });
+      }
+      const ub = unbilled(o).filter((b) => b.cut && daysSince(b.cut.finishedOn) > 3);
+      if (ub.length) out.push({ tone: "warn", text: <>Job order {o.no} ({cust}): {ub.length} cut block{ub.length > 1 ? "s" : ""} not billed yet.</>, go: ["unit", `jobwork:${o.id}`] });
+      for (const bl of o.bills) {
+        const p = party(o.customerId);
+        if (!bl.paid && p && daysSince(bl.date) > p.creditDays) out.push({ tone: "warn", text: <>{p.company}: job work bill {bl.invoiceNo} is {daysSince(bl.date) - p.creditDays} days past its {p.creditDays}-day credit. {rs(billTotals(bl, S.state, p.state || S.state).total)} due.</>, go: ["unit", "jobwork:bills"] });
+      }
+    }
     for (const p of db.parties) if (p.gstin && !checkGstin(p.gstin).ok) out.push({ tone: "warn", text: <>{p.company}’s GSTIN fails the check digit. Correct it before filing GSTR-1.</>, go: ["parties", p.kind] });
     return out.sort((a, c) => (a.tone === c.tone ? 0 : a.tone === "neg" ? -1 : 1));
   }, [db]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -111,7 +126,7 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
     { key: "recv", ok: see("sales"), label: "To collect from customers", value: recv, unit: "inr", hint: `${db.sales.filter((s) => !s.paid).length} invoices open` },
     { key: "stockval", ok: C && (see("stock") || see("blocks")), label: "Stock value at cost", value: blockVal + slabVal, unit: "inr", hint: `Blocks ${lakh(blockVal)} · slabs ${lakh(slabVal)}` },
     { key: "stocksqft", ok: !C && see("stock"), label: "Slab stock", value: stockSqft, unit: "num", hint: "sq ft in stock" },
-    { key: "yard", ok: !C && see("blocks") && hasBlocks(M), label: "Blocks in yard", value: yard.length, unit: "num", hint: `${n0(sum(yard))} t · ${transit.length} on the road` },
+    { key: "yard", ok: !C && see("blocks") && hasBlocks(M), label: "Blocks in yard", value: yard.length, unit: "num", hint: `${n0(sum(yard))} t · ${transit.length} to weigh` },
     { key: "slabcost", ok: C && M.processing, label: "Slab cost per sq ft", value: avgCost, unit: "inr", hint: "Block to polished, all-in", spark: sqftWk },
     { key: "quarry", ok: C && M.quarry && see("quarry"), label: "Quarry cost per tonne", value: mm.perTonne, unit: "inr", delta: ch(mm.perTonne, mPrev.perTonne), goodWhen: "down", spark: tonWk.map((t, i) => (t ? costWk[i] / t : 0)) },
     { key: "buying", ok: C && (M.trading || M.buyBlocks), label: "Stock bought, 30 days", value: buyWk.slice(-4).reduce((a, x) => a + x, 0), unit: "inr", hint: "Blocks and slabs on supplier bills", spark: buyWk },
@@ -128,7 +143,7 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
   };
 
   // Health: simple, explainable checks an owner would ask about.
-  const active = b.filter((x) => x.source !== "import" && ["in_transit", "in_yard", "on_saw"].includes(x.status));
+  const active = b.filter((x) => x.source !== "import" && (x.status === "godown" || x.status === "processing"));
   const open = db.sales.filter((s) => !s.paid);
   const lines = db.sales.flatMap((s) => s.lines);
   const port = db.shipments.filter((s) => freeDaysLeft(s) !== null);
@@ -145,9 +160,8 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
 
   const flow = ([
     M.quarry && see("quarry") && { label: "At quarry", main: `${atMine.length}`, sub: `${n0(sum(atMine))} t`, go: ["inventory", "blocks"] },
-    hasBlocks(M) && see("blocks") && { label: "On the road", main: `${transit.length}`, sub: `${n0(sum(transit))} t`, go: M.processing ? ["unit", "yard"] : ["purchases", "domestic"] },
-    hasBlocks(M) && (see("blocks") || see("processing")) && { label: "Block yard", main: `${yard.length}`, sub: `${n0(sum(yard))} t · ${n2(yard.reduce((a, x) => a + cbm(x), 0))} CBM`, go: ["inventory", "blocks"] },
-    M.processing && see("processing") && { label: "On saw", main: `${onSaw.length}`, sub: `${n0(sum(onSaw))} t`, go: ["unit", "yard"] },
+    hasBlocks(M) && (see("blocks") || see("processing")) && { label: "In godowns", main: `${yard.length}`, sub: `${n0(sum(yard))} t · ${n2(yard.reduce((a, x) => a + cbm(x), 0))} CBM`, go: ["inventory", "blocks"] },
+    M.processing && see("processing") && { label: "Processing", main: `${onSaw.length}`, sub: `${n0(sum(onSaw))} t`, go: ["inventory", "blocks"] },
     M.processing && see("processing") && { label: "Slabs at unit", main: n0(unitLots.reduce((a, l) => a + slabCount(l), 0)), sub: `${n0(unitLots.reduce((a, l) => a + l.available, 0))} sq ft`, go: ["inventory", "slabs"] },
     (M.depot || M.trading) && see("stock") && { label: "Depot", main: n0(depotLots.reduce((a, l) => a + l.available, 0)), sub: "sq ft", go: ["inventory", "slabs"] },
     see("sales") && { label: "Sold, 30 days", main: M.depot || M.trading || M.processing ? n0(soldMonth) : `${db.sales.filter((s) => daysSince(s.date) <= 30).length}`, sub: M.depot || M.trading || M.processing ? "sq ft" : "invoices", go: ["sales"] },
@@ -158,20 +172,22 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
   const hello = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
   const myAlerts = alerts.filter((a) => nav.includes(a.go[0]));
   const summary = [
-    hasBlocks(M) && see("blocks") && `${yard.length} block${yard.length === 1 ? "" : "s"} in the yard${M.processing && see("processing") ? `, ${onSaw.length} on the saws` : ""}`,
+    hasBlocks(M) && see("blocks") && `${yard.length} block${yard.length === 1 ? "" : "s"} in godowns${M.processing && see("processing") ? `, ${onSaw.length} being processed` : ""}`,
     (M.depot || M.trading) && see("stock") && `${n0(stockSqft)} sq ft of slab in stock`,
     M.imports && see("blocks") && `${sailing} import${sailing === 1 ? "" : "s"} on the way`,
-    see("sales") && `${lakh(recv)} due from customers`,
+    M.jobwork && see("jobwork") && `${jobsOf(db).flatMap((o) => o.blocks).filter((b) => b.status === "in_yard" || b.status === "on_saw" || b.status === "cut").length} customer blocks in for job work`,
+    see("sales") && !jobOnly(M) && `${lakh(recv)} due from customers`,
   ].filter(Boolean).join(", ");
   const T = tallyOf(db);
 
   const shortcuts = ([
-    ctx.edit("sales") && ["New sale", "sales", "new"],
-    (M.buyBlocks || M.processing || M.imports) && ctx.edit("blocks") && ["New purchase", "purchases", "domestic:new"],
+    ctx.edit("sales") && !jobOnly(M) && ["New sale", "sales", "new"],
+    M.jobwork && ctx.edit("jobwork") && ["New job order", "unit", "jobwork:new"],
+    (M.buyBlocks || M.processing || M.imports) && !jobOnly(M) && ctx.edit("blocks") && ["New purchase", "purchases", "domestic:new"],
     M.imports && ctx.edit("blocks") && ["New import purchase", "purchases", "import:new"],
     M.trading && ctx.edit("stock") && ["Slabs bought", "purchases", "slabs:new"],
     M.quarry && ctx.edit("quarry") && ["Log extraction cost", "inventory", "costs"],
-    M.processing && ctx.edit("blocks") && ["Receive at unit", "unit", "yard"],
+    M.processing && !jobOnly(M) && ctx.edit("processing") && ["Create lots", "inventory", "lots:"],
     M.stores && ctx.edit("stores") && ["Issue from store", "stores", ""],
   ].filter(Boolean)) as [string, View, string][];
 
@@ -324,7 +340,7 @@ function TradeReport({ ctx }: { ctx: Ctx }) {
   const imp = db.blocks.filter((b) => b.source === "import");
   const impFy = imp.filter((b) => b.date >= fyStart);
   const impBills = new Set(impFy.map((b) => b.purchaseId || b.id)).size;
-  const notIn = imp.filter((b) => b.status === "in_transit");
+  const notIn = imp.filter((b) => b.status === "godown" && !b.tonnes);
   const ships = db.shipments.filter((s) => s.dir === "import" && s.status !== "received");
   const port = ships.filter((s) => freeDaysLeft(s) !== null);
   const exp = db.sales.filter((s) => party(s.customerId)?.intl);
@@ -338,7 +354,7 @@ function TradeReport({ ctx }: { ctx: Ctx }) {
   return (
     <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {tile("Imported this year", C ? lakh(impFy.reduce((a, b) => a + blockCost(b), 0)) : `${impFy.length} blocks`, `${impBills} bill${impBills === 1 ? "" : "s"} · ${n0(impFy.reduce((a, b) => a + (b.tonnes || b.billedTonnes), 0))} t`, ["purchases", "import"])}
-      {tile("Imports not yet received", `${notIn.length + ships.length}`, `${notIn.length} blocks on the road · ${ships.length} shipment${ships.length === 1 ? "" : "s"} on the way`, ["purchases", "import"])}
+      {tile("Imports not yet received", `${notIn.length + ships.length}`, `${notIn.length} blocks not weighed · ${ships.length} shipment${ships.length === 1 ? "" : "s"} on the way`, ["purchases", "import"])}
       {tile("At port", port.length ? `${port.reduce((a, s) => Math.min(a, freeDaysLeft(s)!), 99)} free days` : "—", port.length ? `${port.length} shipment${port.length > 1 ? "s" : ""} waiting to clear` : "Nothing waiting at port")}
       {tile("Exported this year", lakh(expFy.reduce((a, s) => a + saleTaxable(s), 0)), `${expFy.length} export invoices · ${expShips.length} shipment${expShips.length === 1 ? "" : "s"} sailing`, ["sales", "export"])}
     </div>
@@ -352,7 +368,7 @@ function FirmTable({ ctx }: { ctx: Ctx }) {
   const party = (id: string) => R.parties.find((p) => p.id === id);
   const rows = ctx.firms.map((f) => {
     const of = (x: { firmId?: string }) => firmOf(x, S) === f.id;
-    const blocks = R.blocks.filter((b) => of(b) && ["at_mine", "in_transit", "in_yard", "on_saw"].includes(b.status));
+    const blocks = R.blocks.filter((b) => of(b) && ["at_mine", "godown", "processing"].includes(b.status));
     const lots = R.lots.filter((l) => of(l) && l.available > 0);
     const sales = R.sales.filter(of);
     const s30 = sales.filter((x) => daysSince(x.date) <= 30);

@@ -1,7 +1,8 @@
 "use client";
-import { useMemo, useState, type ReactNode } from "react";
-import { ArrowRight, ArrowRightLeft, Images, Pencil, Plus, QrCode, Truck } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ArrowRight, ArrowRightLeft, Factory, Images, Layers, Pencil, Plus, QrCode, Undo2 } from "lucide-react";
 import { baseCost, blockCost, cbm, daysSince, dmy, lakh, n0, n2, perTonne, purchaseValue, rs, rs2, today } from "@/lib/stone/calc";
+import { IN_STOCK, godowns, whereIs } from "@/lib/stone/godowns";
 import { lotCost, lotUnit, storesPerSqft, storesShare } from "@/lib/stone/costing";
 import { firmName, firmOf, journey } from "@/lib/stone/firms";
 import { slabCount } from "@/lib/stone/slabs";
@@ -16,7 +17,8 @@ import { LotForm } from "./Depot";
 import { MoveForm } from "./Unit";
 import { CostForm, MineCostList, MinePerTonne, MineStats } from "./Mines";
 import { fileSrc } from "./files";
-import { Badge, Drawer, Note, Seg, Stat, Table, type Col } from "./ui";
+import LotsForm from "./LotsForm";
+import { Badge, Drawer, Note, Seg, Sel, Stat, Table, setUrlTab, type Col } from "./ui";
 
 export default function Inventory({ ctx, page }: { ctx: Ctx; page: "blocks" | "slabs" }) {
   return page === "slabs" ? <SlabInventory ctx={ctx} /> : <BlockInventory ctx={ctx} />;
@@ -25,8 +27,8 @@ export default function Inventory({ ctx, page }: { ctx: Ctx; page: "blocks" | "s
 // ─── Blocks ───
 
 type BTab = "blocks" | "costs" | "pertonne";
-type BStatus = "stock" | "road" | "done" | "rejected" | "all";
-const IN: Record<BStatus, BlockStatus[] | null> = { stock: ["at_mine", "in_yard", "on_saw"], road: ["in_transit"], done: ["sawn", "sold"], rejected: ["rejected"], all: null };
+type BStatus = "stock" | "processing" | "processed" | "sold" | "all";
+const IN: Record<BStatus, BlockStatus[] | null> = { stock: IN_STOCK, processing: ["processing"], processed: ["processed"], sold: ["sold"], all: null };
 
 function BlockInventory({ ctx }: { ctx: Ctx }) {
   const { db, update } = ctx;
@@ -36,6 +38,10 @@ function BlockInventory({ ctx }: { ctx: Ctx }) {
   const [tabRaw, setTab] = useState<BTab>((ctx.sub as BTab) || "blocks");
   const tab = tabs.includes(tabRaw) ? tabRaw : "blocks";
   const [status, setStatus] = useState<BStatus>("stock");
+  const [gd, setGd] = useState("");
+  // A scanned label can open the lots form for its block ("lots:<block id>")
+  const [lotsFor, setLotsFor] = useState<string | null>(ctx.sub.startsWith("lots:") ? ctx.sub.slice(5) : null);
+  useEffect(() => { if (ctx.sub.startsWith("lots:")) setUrlTab("blocks"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [open, setOpen] = useState<Block | null>(null);
   const [form, setForm] = useState<{ b: Block | null; mode: BlockMode } | null>(null);
   const [labels, setLabels] = useState(false);
@@ -43,10 +49,14 @@ function BlockInventory({ ctx }: { ctx: Ctx }) {
   const [cost, setCost] = useState<MineCost | "new" | null>(null);
   const party = (id: string) => ctx.root.parties.find((p) => p.id === id);
 
-  const blocks = db.blocks.filter((b) => !IN[status] || IN[status]!.includes(b.status));
+  const blocks = db.blocks.filter((b) => (!IN[status] || IN[status]!.includes(b.status)) && (!gd || status !== "stock" || (b.status === "godown" && b.godown === gd)));
   const stock = db.blocks.filter((b) => IN.stock!.includes(b.status));
-  const road = db.blocks.filter((b) => b.status === "in_transit");
-  const atMine = db.blocks.filter((b) => b.source === "own_mine" && b.status === "at_mine");
+  const count = (k: BStatus) => db.blocks.filter((b) => IN[k]!.includes(b.status)).length;
+  const gds = [...new Set([...godowns(db), ...stock.filter((b) => b.status === "godown" && b.godown).map((b) => b.godown!)])];
+  const canProcess = ctx.mods.processing && ctx.edit("processing");
+  const lotsOf = (b: Block) => db.lots.filter((l) => l.blockId === b.id);
+  const issue = (b: Block) => { update((d) => { const x = d.blocks.find((y) => y.id === b.id); if (x) { x.status = "processing"; x.processOn = today(); } }); ctx.say(`${b.no} issued for processing`, "good"); };
+  const unissue = (b: Block) => update((d) => { const x = d.blocks.find((y) => y.id === b.id); if (x) { x.status = "godown"; x.processOn = ""; } });
   const from = (b: Block) => (b.source === "own_mine" ? b.mine || "Own quarry" : party(b.supplierId)?.company ?? (b.source === "import" ? b.mine || "Import" : b.mine || "—"));
 
   const cols: Col<Block>[] = [
@@ -57,18 +67,32 @@ function BlockInventory({ ctx }: { ctx: Ctx }) {
     { key: "s", label: "Supplier", render: (b) => from(b), sort: (b) => from(b) },
     { key: "t", label: "Weight", align: "right", render: (b) => (b.tonnes ? `${n2(b.tonnes)} t` : <span className="text-ink-3">{n2(b.billedTonnes)} t billed</span>), sort: (b) => b.tonnes || b.billedTonnes },
     ...(C ? [{ key: "c", label: "Cost till now ₹/t", align: "right" as const, render: (b: Block) => { const t = b.tonnes || b.billedTonnes; return t ? rs(blockCost(b) / t) : "—"; }, sort: (b: Block) => perTonne(b) }] : []),
+    { key: "w", label: status === "processed" ? "Lots" : status === "processing" ? "Issued" : "Where", render: (b) => {
+      if (b.status === "processed") { const ls = lotsOf(b); return <span>{ls.length} lot{ls.length === 1 ? "" : "s"} · {n0(ls.reduce((a, l) => a + l.sqft, 0))} sq ft</span>; }
+      if (b.status === "processing") return <span>{b.processOn ? `${dmy(b.processOn)} · ${daysSince(b.processOn)} d` : "Processing"}</span>;
+      return <Badge tone={b.status === "written_off" ? "neg" : b.status === "sold" ? "good" : "plain"}>{whereIs(b)}</Badge>;
+    } },
+    ...(canProcess ? [{ key: "a", label: "", render: (b: Block) => (
+      <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+        {b.status === "godown" && <button className="btn btn-quiet btn-sm" onClick={() => issue(b)}><Factory size={13} />Processing</button>}
+        {b.status === "processing" && <>{!lotsOf(b).length && <button className="btn btn-quiet btn-sm !px-2" title="Back to the godown" aria-label="Back to the godown" onClick={() => unissue(b)}><Undo2 size={13} /></button>}<button className="btn btn-primary btn-sm" onClick={() => setLotsFor(b.id)}><Layers size={13} />Create lots</button></>}
+        {b.status === "processed" && <button className="btn btn-quiet btn-sm" onClick={() => setLotsFor(b.id)}>Lots</button>}
+      </div>
+    ) }] : []),
   ];
 
   const save = (b: Block) => { update((d) => { const i = d.blocks.findIndex((x) => x.id === b.id); if (i >= 0) d.blocks[i] = b; else d.blocks.push(b); }); setForm(null); };
+
+  if (lotsFor !== null) return <LotsForm ctx={ctx} blockId={lotsFor || undefined} onClose={(id) => { setLotsFor(null); if (id) setStatus("processed"); }} />;
 
   return (
     <div>
       {quarryOn && C ? <MineStats ctx={ctx} /> : (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="Blocks in stock" value={`${stock.length} · ${n0(stock.reduce((a, b) => a + (b.tonnes || b.billedTonnes), 0))} t`} sub={`${stock.filter((b) => b.status === "on_saw").length} on the saw`} />
+          <Stat label="Blocks in stock" value={`${stock.length} · ${n0(stock.reduce((a, b) => a + (b.tonnes || b.billedTonnes), 0))} t`} sub={gds.length > 1 ? gds.map((g) => `${g} ${stock.filter((b) => b.godown === g).length}`).join(" · ") : `${new Set(stock.map((b) => b.variety)).size} qualities`} />
           {C ? <Stat label="Stock at cost" value={lakh(stock.reduce((a, b) => a + blockCost(b), 0))} sub="Stone, royalty, freight and damage share" /> : <Stat label="Qualities in stock" value={`${new Set(stock.map((b) => b.variety)).size}`} />}
-          <Stat label="On the road" value={`${road.length}`} sub={`${n0(road.reduce((a, b) => a + b.billedTonnes, 0))} t billed`} tone={road.length ? "warn" : undefined} />
-          <Stat label="Sawn or sold" value={`${db.blocks.filter((b) => IN.done!.includes(b.status)).length}`} sub={`${db.blocks.filter((b) => b.status === "rejected").length} rejected`} />
+          <Stat label="Processing" value={`${count("processing")}`} sub={`${n0(db.blocks.filter((b) => b.status === "processing").reduce((a, b) => a + (b.tonnes || b.billedTonnes), 0))} t on the saws`} tone={count("processing") ? "warn" : undefined} />
+          <Stat label="Processed · sold as block" value={`${count("processed")} · ${count("sold")}`} sub={`${db.blocks.filter((b) => b.status === "written_off").length} written off`} />
         </div>
       )}
 
@@ -76,13 +100,14 @@ function BlockInventory({ ctx }: { ctx: Ctx }) {
         {tabs.length > 1 && <Seg value={tab} onChange={setTab} tabs={[{ key: "blocks", label: "Blocks", count: db.blocks.length }, { key: "costs", label: "Extraction costs", count: db.mineCosts.length }, { key: "pertonne", label: "Cost per tonne" }]} />}
         {tab === "blocks" && <Seg value={status} onChange={setStatus} tabs={([
           { key: "stock", label: "In stock", count: stock.length },
-          { key: "road", label: "On the road", count: road.length },
-          { key: "done", label: "Sawn or sold", count: db.blocks.filter((b) => IN.done!.includes(b.status)).length },
-          { key: "rejected", label: "Rejected", count: db.blocks.filter((b) => b.status === "rejected").length },
+          ...(ctx.mods.processing ? [{ key: "processing", label: "Processing", count: count("processing") }, { key: "processed", label: "Processed", count: count("processed") }] : []),
+          { key: "sold", label: "Sold", count: count("sold") },
           { key: "all", label: "All", count: db.blocks.length },
         ] as { key: BStatus; label: string; count: number }[])} />}
+        {tab === "blocks" && status === "stock" && gds.length > 1 && <div className="w-44"><Sel value={gd} onChange={setGd} placeholder="All godowns" options={gds.map((g) => ({ v: g, l: g }))} /></div>}
         <div className="ml-auto flex flex-wrap gap-2">
           {tab === "blocks" && <button className="btn btn-quiet btn-sm" onClick={() => setLabels(true)}><QrCode size={15} />QR labels</button>}
+          {tab === "blocks" && canProcess && <button className="btn btn-primary btn-sm" onClick={() => setLotsFor("")}><Layers size={15} />Create lots</button>}
           {tab === "blocks" && quarryOn && ctx.edit("quarry") && <button className="btn btn-primary btn-sm" onClick={() => setForm({ b: null, mode: "own" })}><Plus size={15} />Block extracted</button>}
           {tab !== "blocks" && ctx.edit("quarry") && <button className="btn btn-primary btn-sm" onClick={() => setCost("new")}><Plus size={15} />Extraction cost</button>}
         </div>
@@ -91,12 +116,7 @@ function BlockInventory({ ctx }: { ctx: Ctx }) {
       <div className="mt-4">
         {tab === "blocks" && (
           <>
-            {quarryOn && ctx.edit("quarry") && atMine.length > 0 && (
-              <div className="mb-4 flex flex-wrap gap-2">
-                {atMine.map((b) => <button key={b.id} className="btn btn-quiet btn-sm" onClick={() => setForm({ b: { ...b, status: "in_transit", date: today() }, mode: "edit" })}><Truck size={14} />Dispatch {b.no}</button>)}
-              </div>
-            )}
-            <Table rows={[...blocks].reverse()} cols={cols} onRow={setOpen} search={(b) => `${b.no} ${b.variety} ${from(b)} ${b.vehicleNo} ${b.eRawanna}`} empty={status === "stock" ? "No blocks in stock. Bought and imported blocks are entered under Purchases." : "No blocks here."} />
+            <Table rows={[...blocks].reverse()} cols={cols} onRow={setOpen} search={(b) => `${b.no} ${b.variety} ${from(b)} ${b.vehicleNo} ${b.eRawanna}`} empty={status === "stock" ? "No blocks in stock. Bought and imported blocks are entered under Purchases." : status === "processing" ? "No block is being processed. Click Processing on a block in stock when it goes to the saw." : status === "processed" ? "No processed blocks yet. They show here once their lots are created." : "No blocks here."} />
             {(ctx.mods.buyBlocks || ctx.mods.imports || ctx.mods.processing) && <p className="mt-2 text-[0.8rem] text-ink-3">Click a block to see its full history and costs. Bought and imported blocks are entered under <button className="underline" onClick={() => ctx.go("purchases")}>Purchases</button>.</p>}
           </>
         )}
@@ -104,7 +124,7 @@ function BlockInventory({ ctx }: { ctx: Ctx }) {
         {tab === "pertonne" && <MinePerTonne ctx={ctx} />}
       </div>
 
-      {open && <BlockHistory ctx={ctx} block={db.blocks.find((x) => x.id === open.id) ?? open} onClose={() => setOpen(null)} onEdit={(b) => { setOpen(null); setForm({ b, mode: "edit" }); }} onSend={ctx.firms.length > 1 && ctx.edit("blocks") ? (b) => { setOpen(null); setSend(b); } : undefined} />}
+      {open && <BlockHistory ctx={ctx} block={db.blocks.find((x) => x.id === open.id) ?? open} onLots={canProcess ? (b) => { setOpen(null); setLotsFor(b.id); } : undefined} onClose={() => setOpen(null)} onEdit={(b) => { setOpen(null); setForm({ b, mode: "edit" }); }} onSend={ctx.firms.length > 1 && ctx.edit("blocks") ? (b) => { setOpen(null); setSend(b); } : undefined} />}
       {form && <BlockForm costs={C} db={db} initial={form.b?.id ? form.b : null} mode={form.mode} key={form.b?.id ?? form.mode} onClose={() => setForm(null)} onSave={save} onDelete={(id) => { update((d) => { d.blocks = d.blocks.filter((x) => x.id !== id); }); setForm(null); }} />}
       {labels && <QrLabels ctx={ctx} blocks={blocks} onClose={() => setLabels(false)} />}
       {send && <TransferForm ctx={ctx} item={send} kind="block" onClose={() => setSend(null)} />}
@@ -121,7 +141,7 @@ const Fact = ({ l, v }: { l: string; v: ReactNode }) => (
 );
 
 /** Everything about one block: where it came from, every cost on it, and each step it went through. */
-function BlockHistory({ ctx, block: b, onClose, onEdit, onSend }: { ctx: Ctx; block: Block; onClose: () => void; onEdit: (b: Block) => void; onSend?: (b: Block) => void }) {
+function BlockHistory({ ctx, block: b, onClose, onEdit, onSend, onLots }: { ctx: Ctx; block: Block; onClose: () => void; onEdit: (b: Block) => void; onSend?: (b: Block) => void; onLots?: (b: Block) => void }) {
   const C = ctx.costs;
   const party = (id: string) => ctx.root.parties.find((p) => p.id === id);
   const t = b.tonnes || b.billedTonnes;
@@ -132,7 +152,7 @@ function BlockHistory({ ctx, block: b, onClose, onEdit, onSend }: { ctx: Ctx; bl
   const canEdit = b.source === "own_mine" ? ctx.edit("quarry") : ctx.edit("blocks");
   return (
     <Drawer open wide title={`Block ${b.no}`} sub={`${b.variety} · ${STATUS_LABEL[b.status]}${ctx.firms.length > 1 ? ` · ${firmName(ctx.root.settings, firmOf(b, ctx.root.settings))}` : ""}`} onClose={onClose}
-      footer={<>{canEdit && <button className="btn btn-primary" onClick={() => onEdit(b)}><Pencil size={14} />Edit block</button>}<button className="btn btn-quiet" onClick={onClose}>Close</button>{onSend && <button className="btn btn-quiet btn-sm ml-auto" onClick={() => onSend(b)}><ArrowRightLeft size={14} />Send to firm</button>}</>}>
+      footer={<>{onLots && (b.status === "processing" || b.status === "processed") && <button className="btn btn-primary" onClick={() => onLots(b)}><Layers size={14} />{b.status === "processing" ? "Create lots" : "Lots"}</button>}{canEdit && <button className={`btn ${onLots && (b.status === "processing" || b.status === "processed") ? "btn-quiet" : "btn-primary"}`} onClick={() => onEdit(b)}><Pencil size={14} />Edit block</button>}<button className="btn btn-quiet" onClick={onClose}>Close</button>{onSend && <button className="btn btn-quiet btn-sm ml-auto" onClick={() => onSend(b)}><ArrowRightLeft size={14} />Send to firm</button>}</>}>
       <div className="grid gap-x-6 gap-y-3 rounded-2xl bg-surface p-4 text-[0.9rem] sm:grid-cols-3">
         <Fact l="Date" v={dmy(b.date)} />
         <Fact l={b.source === "own_mine" ? "Own quarry" : b.source === "import" ? "Imported from" : "Supplier"} v={b.source === "own_mine" ? b.mine : party(b.supplierId)?.company ?? b.mine} />
@@ -147,6 +167,7 @@ function BlockHistory({ ctx, block: b, onClose, onEdit, onSend }: { ctx: Ctx; bl
         <Fact l="Billed · received" v={`${n2(b.billedTonnes)} t · ${b.tonnes ? `${n2(b.tonnes)} t` : "not yet"}`} />
         <Fact l="Received on" v={b.receivedOn ? `${dmy(b.receivedOn)}${b.weighSlip ? ` · slip ${b.weighSlip}` : ""}` : ""} />
         <Fact l="Stone · grade" v={`${b.stoneType[0].toUpperCase() + b.stoneType.slice(1)} · ${b.grade}`} />
+        <Fact l="Where" v={b.status === "godown" ? b.godown || "Godown" : `${STATUS_LABEL[b.status]}${b.processOn && b.status === "processing" ? ` since ${dmy(b.processOn)}` : ""}`} />
         {b.defects && <div className="sm:col-span-2"><Fact l="Defects" v={b.defects} /></div>}
       </div>
 

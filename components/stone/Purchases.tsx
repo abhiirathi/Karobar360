@@ -7,6 +7,7 @@ import { emptyBlock, emptyParty } from "@/lib/stone/seed";
 import type { Block, BlockStatus, Grade, ImportBill, Party, SlabLot, StoneType } from "@/lib/stone/types";
 import type { Ctx } from "./StoneApp";
 import { STATUS_LABEL } from "./BlockForm";
+import { godowns, whereIs } from "@/lib/stone/godowns";
 import { BuyForm } from "./Depot";
 import { PartyForm } from "./Parties";
 import { Area, Badge, Drawer, F, Grid, Note, NumIn, Pick, Section, Sel, Seg, Stat, Table, TextIn, setUrlTab, type Col } from "./ui";
@@ -17,8 +18,8 @@ export type Bill = { id: string; blocks: Block[]; imp: boolean };
 const STONES: StoneType[] = ["marble", "granite", "sandstone", "quartzite", "onyx", "other"];
 const GRADES: Grade[] = ["A", "B", "C", "Commercial"];
 const CHARGES = ["Customs duty", "CHA charges", "Port, CFS & line charges", "Freight port to yard", "Insurance", "Other"];
-/** Blocks still at the purchase stage; once on the saw, sawn or sold their status is no longer the bill's. */
-const EARLY: BlockStatus[] = ["in_transit", "in_yard"];
+/** Blocks still lying in a godown; once issued for processing or sold they stay on the bill as they are. */
+const EARLY: BlockStatus[] = ["godown"];
 
 /** Bought and imported blocks grouped by the bill they came on. Blocks entered one by one before bills each make their own. */
 export function bills(blocks: Block[]): Bill[] {
@@ -46,8 +47,8 @@ export default function Purchases({ ctx }: { ctx: Ctx }) {
   const rows = all.filter((x) => (tab === "import") === x.imp);
   const slabLots = db.lots.filter((l) => l.source === "purchase");
   const month = all.filter((x) => daysSince(x.blocks[0].date) <= 30);
-  const onRoad = db.blocks.filter((b) => b.source !== "own_mine" && b.status === "in_transit");
-  const short = db.blocks.filter((b) => b.source !== "own_mine" && weightCheck(b)?.flag === "short" && b.status !== "rejected");
+  const unweighed = db.blocks.filter((b) => b.source !== "own_mine" && b.status === "godown" && !b.tonnes);
+  const short = db.blocks.filter((b) => b.source !== "own_mine" && weightCheck(b)?.flag === "short" && b.status !== "written_off");
   const val = (x: Bill) => x.blocks.reduce((a, b) => a + baseCost(b), 0);
 
   const cols: Col<Bill>[] = [
@@ -58,7 +59,7 @@ export default function Purchases({ ctx }: { ctx: Ctx }) {
     { key: "bt", label: "Billed", align: "right", render: (x) => `${n2(x.blocks.reduce((a, b) => a + b.billedTonnes, 0))} t` },
     { key: "rt", label: "Received", align: "right", render: (x) => { const r = x.blocks.reduce((a, b) => a + b.tonnes, 0); const bt = x.blocks.reduce((a, b) => a + b.billedTonnes, 0); return r ? <span className={bt && Math.abs(r - bt) / bt > WEIGHT_TOLERANCE ? "font-medium text-neg" : ""}>{n2(r)} t</span> : <span className="text-ink-3">Not yet</span>; } },
     ...(C ? [{ key: "v", label: "Value", align: "right" as const, render: (x: Bill) => rs(val(x)), sort: (x: Bill) => val(x) }] : []),
-    { key: "st", label: "Status", render: (x) => { const road = x.blocks.filter((b) => b.status === "in_transit").length; return road ? <Badge tone="warn">{road} on the road</Badge> : <Badge tone="good">Received</Badge>; } },
+    { key: "st", label: "Status", render: (x) => { const m = new Map<string, number>(); for (const b of x.blocks) m.set(whereIs(b), (m.get(whereIs(b)) ?? 0) + 1); return <div className="flex flex-wrap gap-1">{[...m.entries()].map(([k, n]) => <Badge key={k} tone={k === STATUS_LABEL.sold || k === STATUS_LABEL.processed ? "good" : k === STATUS_LABEL.written_off ? "neg" : "plain"}>{x.blocks.length > 1 ? `${n} ` : ""}{k}</Badge>)}</div>; } },
   ];
   const lotCols: Col<SlabLot>[] = [
     { key: "d", label: "Date", render: (l) => dmy(l.createdAt), sort: (l) => l.createdAt },
@@ -74,7 +75,7 @@ export default function Purchases({ ctx }: { ctx: Ctx }) {
     <div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {C ? <Stat label="Bought, last 30 days" value={lakh(month.reduce((a, x) => a + val(x), 0))} sub={`${month.length} bills · ${month.reduce((a, x) => a + x.blocks.length, 0)} blocks`} /> : <Stat label="Bills, last 30 days" value={`${month.length}`} sub={`${month.reduce((a, x) => a + x.blocks.length, 0)} blocks`} />}
-        <Stat label="On the road" value={`${onRoad.length} blocks`} sub={`${n0(onRoad.reduce((a, b) => a + b.billedTonnes, 0))} t billed, not yet received`} tone={onRoad.length ? "warn" : undefined} />
+        <Stat label="Received weight to enter" value={`${unweighed.length} blocks`} sub={unweighed.length ? `${n0(unweighed.reduce((a, b) => a + b.billedTonnes, 0))} t billed; costing uses it until then` : "Every block is weighed"} tone={unweighed.length ? "warn" : undefined} />
         <Stat label="Short weight" value={`${short.length} blocks`} sub={short.length ? `${n2(short.reduce((a, b) => a + b.billedTonnes - b.tonnes, 0))} t less than billed` : "All within ±5% of the bills"} tone={short.length ? "warn" : undefined} />
         <Stat label="Import bills" value={`${all.filter((x) => x.imp).length}`} sub={`${all.filter((x) => !x.imp).length} domestic`} />
       </div>
@@ -102,7 +103,7 @@ type Head = {
   supplierId: string; date: string; invoiceNo: string; mine: string; leaseNo: string; rateBasis: Block["rateBasis"];
   eRawanna: string; royalty: number; dmft: number; ewayBill: string;
   vehicleNo: string; driver: string; driverPhone: string; transporterId: string; freight: number; loading: number; otherCost: number;
-  status: "in_transit" | "in_yard"; receivedOn: string; weighSlip: string; defects: string; notes: string; imp: ImportBill;
+  godown: string; receivedOn: string; weighSlip: string; defects: string; notes: string; imp: ImportBill;
 };
 
 const emptyImp = (): ImportBill => ({ blNo: "", blDate: "", vessel: "", port: "", cif: 0, charges: [] });
@@ -123,7 +124,7 @@ function PurchaseForm({ ctx, bill, imp, onClose }: { ctx: Ctx; bill: Bill | null
       supplierId: f?.supplierId ?? "", date: f?.date || today(), invoiceNo: f?.invoiceNo ?? "", mine: f?.mine ?? "", leaseNo: f?.leaseNo ?? "", rateBasis: f?.rateBasis ?? (imp ? "cbm" : "tonne"),
       eRawanna: f?.eRawanna ?? "", royalty: sum("royalty"), dmft: sum("dmft"), ewayBill: f?.ewayBill ?? "",
       vehicleNo: f?.vehicleNo ?? "", driver: f?.driver ?? "", driverPhone: f?.driverPhone ?? "", transporterId: f?.transporterId ?? "", freight: sum("freight"), loading: sum("loading"), otherCost: sum("otherCost"),
-      status: f && f.status !== "in_transit" ? "in_yard" : "in_transit", receivedOn: f?.receivedOn ?? "", weighSlip: f?.weighSlip ?? "", defects: "", notes: f?.notes ?? "",
+      godown: f?.godown || godowns(db)[0] || "", receivedOn: f?.receivedOn ?? "", weighSlip: f?.weighSlip ?? "", defects: "", notes: f?.notes ?? "",
       // Import blocks entered before bills: their landed cost becomes one charge, so nothing is lost.
       imp: old ? structuredClone(old) : f && imp ? { ...emptyImp(), charges: [{ label: "Landed cost", amount: bill!.blocks.reduce((a, b) => a + b.importCost, 0), note: "Entered before" }] } : emptyImp(),
     };
@@ -168,6 +169,7 @@ function PurchaseForm({ ctx, bill, imp, onClose }: { ctx: Ctx; bill: Bill | null
     if (!lines.length) return setErr("Add at least one block.");
     if (lines.some((x) => !x.quality.trim())) return setErr("Pick the quality on every line.");
     if (lines.some((x) => !x.billed && !x.received)) return setErr("Enter the billed quantity on every line.");
+    if (!h.godown && lines.some((x) => !locked(x))) return setErr(godowns(db).length ? "Choose the godown the blocks go into." : "Add a godown under Masters → Godowns first.");
     const clash = nos.find((n, i) => !n.trim() || nos.indexOf(n) !== i || db.blocks.some((b) => b.no.trim().toLowerCase() === n.trim().toLowerCase() && !lines.some((x) => x.id === b.id)));
     if (clash !== undefined) return setErr(clash.trim() ? `Block ${clash} is already in your register.` : "Enter a block no. or tick Auto.");
     const pid = bill?.blocks[0]?.purchaseId || bill?.id || uid();
@@ -186,9 +188,10 @@ function PurchaseForm({ ctx, bill, imp, onClose }: { ctx: Ctx; bill: Bill | null
       if (!b.imp) delete b.imp;
       if (!x.old && h.defects) b.defects = h.defects;
       if (!locked(x)) {
-        b.status = x.received > 0 || h.status === "in_yard" ? "in_yard" : "in_transit";
-        if (b.status === "in_yard" && !b.receivedOn) b.receivedOn = h.receivedOn || today();
-        if (b.status === "in_transit") b.receivedOn = "";
+        // A purchase puts its blocks straight into the godown.
+        b.status = "godown";
+        b.godown = h.godown;
+        b.receivedOn = h.receivedOn || (x.received > 0 ? b.receivedOn || today() : "");
       }
       return b;
     });
@@ -318,7 +321,7 @@ function PurchaseForm({ ctx, bill, imp, onClose }: { ctx: Ctx; bill: Bill | null
 
       <Section title="Where it is">
         <Grid cols={3}>
-          <F label="Status" hint="A block with its received weight filled is in the yard"><Sel value={h.status} onChange={(v) => setHd("status", v as Head["status"])} options={[{ v: "in_transit", l: STATUS_LABEL.in_transit }, { v: "in_yard", l: STATUS_LABEL.in_yard }]} /></F>
+          <F label="Godown *" hint={godowns(db).length ? "The blocks go into this godown as soon as you save" : "Add your godowns under Masters → Godowns first"}><Sel value={h.godown} onChange={(v) => setHd("godown", v)} placeholder="Choose godown" options={[...new Set([...godowns(db), h.godown])].filter(Boolean).map((g) => ({ v: g, l: g }))} /></F>
           <F label="Received on"><TextIn type="date" value={h.receivedOn} onChange={(v) => setHd("receivedOn", v)} /></F>
           <F label="Weighbridge slip no."><TextIn value={h.weighSlip} onChange={(v) => setHd("weighSlip", v)} upper /></F>
           {!bill && <F label="Defects / damage" span={3}><Area value={h.defects} onChange={(v) => setHd("defects", v)} placeholder="Cracks, colour patches, veins, chipped corners" /></F>}

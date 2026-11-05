@@ -21,7 +21,7 @@ function Qr({ text, size = 116 }: { text: string; size?: number }) {
 
 /** Sheet of QR labels, three across an A4 page. Stick one on each block or paint the number beside it. */
 export default function QrLabels({ ctx, blocks, onClose }: { ctx: Ctx; blocks: Block[]; onClose: () => void }) {
-  const [pick, setPick] = useState<Set<string>>(() => new Set(blocks.filter((b) => ["at_mine", "in_transit", "in_yard", "on_saw"].includes(b.status)).map((b) => b.id)));
+  const [pick, setPick] = useState<Set<string>>(() => new Set(blocks.filter((b) => ["at_mine", "godown", "processing"].includes(b.status)).map((b) => b.id)));
   const chosen = useMemo(() => blocks.filter((b) => pick.has(b.id)), [blocks, pick]);
   const sup = (id: string) => ctx.db.parties.find((p) => p.id === id)?.company;
   const toggle = (id: string) => setPick((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });

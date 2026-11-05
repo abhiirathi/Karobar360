@@ -1,8 +1,8 @@
 // Who can see and change what. Shared by the browser and the server; the server is the one that enforces it.
 
 export type Level = "none" | "view" | "edit";
-export type AreaKey = "quarry" | "blocks" | "processing" | "stores" | "stock" | "sales" | "trade" | "parties" | "tally" | "settings";
-export type Section = "settings" | "parties" | "blocks" | "mineCosts" | "jobs" | "lots" | "damages" | "shipments" | "sales" | "tally" | "tallyCfg" | "stores";
+export type AreaKey = "quarry" | "blocks" | "processing" | "jobwork" | "stores" | "stock" | "sales" | "trade" | "parties" | "tally" | "settings";
+export type Section = "settings" | "parties" | "blocks" | "mineCosts" | "jobs" | "lots" | "damages" | "shipments" | "sales" | "tally" | "tallyCfg" | "stores" | "jobwork";
 
 export interface Perms {
   areas: Partial<Record<AreaKey, Level>>;
@@ -28,6 +28,7 @@ export const AREAS: { key: AreaKey; label: string; hint: string }[] = [
   { key: "quarry", label: "Quarry", hint: "Own quarry blocks and running costs: diesel, wire, labour" },
   { key: "blocks", label: "Blocks and purchases", hint: "Block purchases, gate receiving, weighbridge, photos, QR labels" },
   { key: "processing", label: "Sawing and processing", hint: "Load on saw, slabs out, trolley damage" },
+  { key: "jobwork", label: "Job work", hint: "Customers' blocks cut for a charge: orders, delivery challans, bills, payments" },
   { key: "stores", label: "Stores", hint: "Epoxy, resin, polish, abrasives, blades, spares: receive and issue" },
   { key: "stock", label: "Slab inventory", hint: "Lots at unit and depot, racks, catalogue photos, slab purchases" },
   { key: "sales", label: "Sales", hint: "Invoices, payments, e-invoice and e-way bill" },
@@ -37,13 +38,14 @@ export const AREAS: { key: AreaKey; label: string; hint: string }[] = [
   { key: "settings", label: "Company settings", hint: "Rates, royalty, invoice format, catalogue" },
 ];
 
-export const ALL_SECTIONS: Section[] = ["settings", "parties", "blocks", "mineCosts", "jobs", "lots", "damages", "shipments", "sales", "tally", "tallyCfg", "stores"];
+export const ALL_SECTIONS: Section[] = ["settings", "parties", "blocks", "mineCosts", "jobs", "lots", "damages", "shipments", "sales", "tally", "tallyCfg", "stores", "jobwork"];
 
 /** Data each area reads, and the part of it the area may change. */
 const AREA_SECTIONS: Record<AreaKey, { rw: Section[]; r: Section[] }> = {
   quarry: { rw: ["blocks", "mineCosts"], r: ["parties"] },
-  blocks: { rw: ["blocks"], r: ["parties", "shipments"] },
-  processing: { rw: ["blocks", "jobs", "lots", "damages"], r: ["parties", "stores"] },
+  blocks: { rw: ["blocks", "jobwork"], r: ["parties", "shipments"] },
+  processing: { rw: ["blocks", "jobs", "lots", "damages", "jobwork"], r: ["parties", "stores"] },
+  jobwork: { rw: ["jobwork"], r: ["parties", "sales", "tallyCfg"] },
   stores: { rw: ["stores"], r: ["parties", "jobs"] },
   stock: { rw: ["lots"], r: ["blocks", "jobs"] },
   sales: { rw: ["sales", "lots", "blocks"], r: ["parties", "tallyCfg"] },
@@ -59,7 +61,7 @@ export const ROLES: { key: string; label: string; blurb: string; perms: Perms }[
   { key: "manager", label: "Manager / partner", blurb: "Everything, including adding people", perms: ALL_EDIT },
   {
     key: "accountant", label: "Accountant / munim", blurb: "Invoices, payments, parties, Tally; sees costs",
-    perms: { areas: { sales: "edit", parties: "edit", tally: "edit", stock: "view", blocks: "view", stores: "view", trade: "view", quarry: "view", settings: "view" }, costs: true, team: false },
+    perms: { areas: { sales: "edit", jobwork: "edit", parties: "edit", tally: "edit", stock: "view", blocks: "view", stores: "view", trade: "view", quarry: "view", settings: "view" }, costs: true, team: false },
   },
   {
     key: "sales", label: "Sales", blurb: "Sees slab stock and invoices; makes invoices",
@@ -75,7 +77,7 @@ export const ROLES: { key: string; label: string; blurb: string; perms: Perms }[
   },
   {
     key: "yard", label: "Yard and saw supervisor", blurb: "Block yard, saws, slabs out, damage, issues from stores",
-    perms: { areas: { blocks: "edit", processing: "edit", stores: "edit", stock: "view" }, costs: false, team: false },
+    perms: { areas: { blocks: "edit", processing: "edit", jobwork: "view", stores: "edit", stock: "view" }, costs: false, team: false },
   },
   {
     key: "storekeeper", label: "Store keeper", blurb: "Receives and issues epoxy, resin, polish, blades and spares",

@@ -7,8 +7,8 @@ type Guide = { key: string; view: View; sub?: string; title: string; what: strin
 
 const JOURNEY = [
   { icon: ShoppingCart, title: "Block is bought", where: "Purchases → Domestic or Import", text: "One bill, one or more blocks: supplier, quality, billed weight, rawanna, vehicle. Own quarry blocks: Inventory → Blocks → Block extracted." },
-  { icon: Truck, title: "Reaches the yard", where: "Purchases → open the bill → Received qty", text: "Enter the weight received. Costing follows it, and any shortage against the bill is flagged." },
-  { icon: Factory, title: "Cut on the saw", where: "Manufacturing unit → Block yard → Load on saw → Slabs out", text: "Enter how many slabs came out and give them a lot no." },
+  { icon: Truck, title: "Into the godown", where: "Purchases → Godown, then Received qty", text: "Saving the purchase puts its blocks in the godown you pick. Enter the weight received when it is weighed; costing follows it." },
+  { icon: Factory, title: "Processing, then lots", where: "Inventory → Blocks → Processing → Create lots", text: "Click Processing when a block goes to the saw. When it is done, Create lots: pick the block and enter each lot with its size and slabs." },
   { icon: Warehouse, title: "Slabs in stock", where: "Inventory → Slabs, by lot or by slab", text: "Each lot shows its block no. and its cost per sq ft, stores included." },
   { icon: ReceiptText, title: "Sold on an invoice", where: "Sales → New sale", text: "Pick the lot and the exact slabs. GST, e-way bill and export papers are made for you." },
   { icon: Wallet, title: "Payment received", where: "Sales → Payment column", text: "Switch Due to Received. Overdue invoices show on the dashboard." },
@@ -17,16 +17,18 @@ const JOURNEY = [
 const GUIDES: Guide[] = [
   {
     key: "overview", view: "overview", title: "Overview (dashboard)",
-    what: "One screen with today’s position: blocks on the road and in the yard, slab stock, sales, money to collect and anything that needs attention.",
+    what: "One screen with today’s position: blocks in godowns and in processing, slab stock, sales, money to collect and anything that needs attention.",
     steps: ["Read the alerts at the top. Each one says what is wrong and takes you to the record when you click it.", "Click any figure to open the section behind it.", "Use Customise dashboard to hide panels you don’t need or reorder them."],
   },
   {
     key: "inventory", view: "inventory", sub: "blocks", title: "Inventory",
     what: "Every block and every slab lot you hold, with its cost so far.",
     steps: [
-      "Blocks: block no., quality, supplier, weight and cost per tonne till now. Use the chips to see blocks on the road, sawn or sold, or rejected.",
+      "Blocks: block no., quality, supplier, weight, cost per tonne till now and the godown it is in. Tabs: In stock, Processing, Processed, Sold and All.",
+      "Click Processing on a block in stock when it goes to the saw. When it is cut, click Create lots: pick the block, then add each lot with its no., thickness, slab size and number of slabs. The slabs go into slab stock and the block moves to Processed. More lots can be added to it later.",
+      "A block sold without processing moves to Sold. A block written off after damage shows only under All.",
       "Click a block for everything else: date, vehicle, rawanna, size, each cost on it, the lots cut from it and every step it went through.",
-      "Own quarry: click Block extracted when a block is cut, then Dispatch when it leaves. Extraction costs and Cost per tonne sit next to the block list.",
+      "Own quarry: click Block extracted when a block is cut. It stays At mine until it is sold or sent to another firm. Extraction costs and Cost per tonne sit next to the block list.",
       "Slabs: one line per lot, with the block it came from. Cost per sq ft includes the share of stores issued that month.",
       "Click a lot for its history: the opening entry, every sale on its own line, the total cost of the lot so far and the net margin on what is sold.",
     ],
@@ -48,12 +50,24 @@ const GUIDES: Guide[] = [
     key: "unit", view: "unit", sub: "yard", title: "Manufacturing unit",
     what: "The factory floor: block yard, saws and transit damage.",
     steps: [
-      "Block yard: when a truck arrives, click Receive and enter the weighbridge net weight.",
-      "Click Load on saw when the block goes on the gang saw or wire saw.",
-      "When cutting is done, click Slabs out. Enter the number of slabs, then give all of them one lot no. or split them by range. Tick any broken slab.",
+      "Godown: blocks waiting for the saw. Click Weigh on a block whose received weight is not in yet.",
+      "Click Processing when the block goes on the gang saw or wire saw.",
+      "When cutting is done, click Create lots and enter each lot with its slab size and count. Machine, hours, power and labour are entered once for the block and split over its lots.",
       "Damage: if a block cracks on the way, record it here. Its cost is spread over the blocks that came with it.",
     ],
     tip: "Blades, resin, netting and polishing are not entered on the saw: what Stores issue each month is spread over the sq ft cut that month.",
+  },
+  {
+    key: "jobwork", view: "unit", sub: "jobwork", title: "Job work",
+    what: "A customer's own block cut into slabs here for a charge. The block and slabs stay theirs: they never enter your stock, costs or sales. Switch it on in Settings → sections (We cut customers' blocks).",
+    steps: [
+      "New job order: pick the customer, thickness, finish and the cutting rate per sq ft of good slabs. Add extras such as resin, polishing, netting or loading, and the free days before yard rent starts.",
+      "List each block with the customer's block mark, size, weight and challan no. Write down cracks or chips on arrival so nobody argues later.",
+      "The blocks join the Production floor queue with a Job tag. Click Load on saw, then Slabs out when they are cut: enter good slabs and any that broke.",
+      "Send slabs back makes a delivery challan for the vehicle. If the customer has dues past credit days or over the credit limit, it stops; only the owner can let it go, with a reason.",
+      "Make bill charges good slabs at the order rate, the extras and any yard rent. Broken slabs are billed only if you add them with a reason. Mark payment received when it comes.",
+    ],
+    tip: "Job work does not take a share of stores cost; that stays on your own slabs.",
   },
   {
     key: "stores", view: "stores", title: "Stores",

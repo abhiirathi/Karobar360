@@ -4,7 +4,7 @@ import { Camera, Check, Factory, Truck } from "lucide-react";
 import { cbm, dmy, n2, today } from "@/lib/stone/calc";
 import type { Ctx } from "./StoneApp";
 import type { Block } from "@/lib/stone/types";
-import { STATUS_LABEL } from "./BlockForm";
+import { whereIs } from "@/lib/stone/godowns";
 import { Badge, Note, readPhoto } from "./ui";
 import { Weighment } from "./Weigh";
 import { fileSrc } from "./files";
@@ -29,12 +29,12 @@ export default function Scan({ ctx, blockId }: { ctx: Ctx; blockId: string }) {
   const canSaw = ctx.edit("processing");
 
   const receive = () => {
-    update((d) => { const x = d.blocks.find((y) => y.id === b.id)!; x.status = "in_yard"; x.receivedOn = x.receivedOn || today(); Object.assign(x, wb); if (!x.tonnes) x.tonnes = x.billedTonnes; });
-    setDone("Received in the yard");
+    update((d) => { const x = d.blocks.find((y) => y.id === b.id)!; x.receivedOn = x.receivedOn || today(); Object.assign(x, wb); if (!x.tonnes) x.tonnes = x.billedTonnes; });
+    setDone("Received weight saved");
   };
   const toSaw = () => {
-    update((d) => { const x = d.blocks.find((y) => y.id === b.id)!; x.status = "on_saw"; });
-    setDone("Loaded on the saw");
+    update((d) => { const x = d.blocks.find((y) => y.id === b.id)!; x.status = "processing"; x.processOn = today(); });
+    setDone("Issued for processing");
   };
   const addPhoto = async (file: File | undefined) => {
     if (!file) return;
@@ -53,7 +53,7 @@ export default function Scan({ ctx, blockId }: { ctx: Ctx; blockId: string }) {
             <div className="text-ink-2">{b.variety} · {b.l}×{b.w}×{b.h} cm · {n2(b.tonnes || b.billedTonnes)} t · {n2(cbm(b))} CBM</div>
             <div className="mt-1 text-[0.86rem] text-ink-3">{b.source === "own_mine" ? b.mine : sup} · {dmy(b.date)} {b.vehicleNo && `· ${b.vehicleNo}`}</div>
           </div>
-          <Badge tone={b.status === "in_yard" || b.status === "on_saw" ? "good" : "plain"}>{STATUS_LABEL[b.status]}</Badge>
+          <Badge tone={b.status === "godown" || b.status === "processing" ? "good" : "plain"}>{whereIs(b)}</Badge>
         </div>
         {!!b.photos?.length && (
           <div className="mt-4 flex gap-2 overflow-x-auto">
@@ -66,15 +66,15 @@ export default function Scan({ ctx, blockId }: { ctx: Ctx; blockId: string }) {
       {done && <div className="mt-4 flex items-center gap-2 rounded-2xl bg-accent-soft px-4 py-3 font-medium"><Check size={16} />{done}</div>}
 
       <div className="mt-4 space-y-3">
-        {canGate && (b.status === "in_transit" || b.status === "at_mine") && (
+        {canGate && b.status === "godown" && !b.tonnes && (
           <div className="rounded-2xl bg-surface p-4">
             <div className="mb-3 text-sm font-medium">Weighment <span className="font-normal text-ink-3">(optional)</span></div>
             <Weighment ctx={ctx} block={{ ...b, ...wb }} onChange={(p) => setWb((x) => ({ ...x, ...p }))} />
-            <button className="btn btn-primary mt-3 w-full justify-center py-3" onClick={receive}><Truck size={16} />Received at the gate</button>
+            <button className="btn btn-primary mt-3 w-full justify-center py-3" onClick={receive}><Truck size={16} />Save received weight</button>
           </div>
         )}
-        {canSaw && b.status === "in_yard" && <button className="btn btn-primary w-full justify-center py-3" onClick={toSaw}><Factory size={16} />Loaded on the saw</button>}
-        {canSaw && b.status === "on_saw" && <button className="btn btn-primary w-full justify-center py-3" onClick={() => go("unit", "yard")}>Record slabs out</button>}
+        {canSaw && b.status === "godown" && <button className="btn btn-primary w-full justify-center py-3" onClick={toSaw}><Factory size={16} />Issue for processing</button>}
+        {canSaw && b.status === "processing" && <button className="btn btn-primary w-full justify-center py-3" onClick={() => go("inventory", `lots:${b.id}`)}>Create lots</button>}
         {canGate && (
           <label className="btn btn-quiet w-full cursor-pointer justify-center py-3">
             <Camera size={16} />Add a photo
