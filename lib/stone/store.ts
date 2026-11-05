@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { applyPurge } from "./calc";
-import { DEFAULT_SETTINGS, seed } from "./seed";
+import { DEFAULT_SETTINGS, seed, seedLabour } from "./seed";
 import { ALL_SECTIONS, permsOf, type Me, type Perms, type Section } from "./perm";
 import type { StoneDB } from "./types";
 import { migrateBlocks } from "./godowns";
@@ -18,6 +18,8 @@ function loadLocal(): StoneDB {
       if (db && db.v === 1) {
         const moved = migrateBlocks(db);
         if (applyPurge(db) || moved) saveLocal(db);
+        // Sample company saved before the labour page existed: add its workers.
+        if (!db.labour) { db.labour = seedLabour(db.settings); saveLocal(db); }
         return db;
       }
     }
@@ -49,6 +51,7 @@ function build(p: Payload): StoneDB {
     tally: (s.tally?.data as StoneDB["tally"]) ?? undefined,
     tallyCfg: (s.tallyCfg?.data as StoneDB["tallyCfg"]) ?? undefined,
     stores: (s.stores?.data as StoneDB["stores"]) ?? undefined,
+    labour: arr("labour"),
   };
 }
 

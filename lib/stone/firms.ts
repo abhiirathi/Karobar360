@@ -21,7 +21,7 @@ export const multiFirm = (s: StoneSettings | undefined) => firmsOf(s).length > 1
 export const firmOf = (x: { firmId?: string }, s: StoneSettings) => x.firmId || firmsOf(s)[0]?.id || "";
 export const firmName = (s: StoneSettings, id: string) => firmsOf(s).find((f) => f.id === id)?.name ?? "—";
 
-const SCOPED = ["blocks", "lots", "sales", "mineCosts", "jobs", "shipments", "damages", "jobwork"] as const;
+const SCOPED = ["blocks", "lots", "sales", "mineCosts", "jobs", "shipments", "damages", "jobwork", "labour"] as const;
 
 /** What one firm sees: its own records, and its own name, GSTIN and sections on every screen and invoice. */
 export function scope(db: StoneDB, firmId: string | null): StoneDB {
