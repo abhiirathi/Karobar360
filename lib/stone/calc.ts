@@ -304,6 +304,6 @@ export function lakh(n: number) {
 }
 export function dmy(d: string) {
   if (!d) return "—";
-  const [y, m, day] = d.split("-");
+  const [y, m, day] = d.slice(0, 10).split("-");
   return `${day}/${m}/${y.slice(2)}`;
 }
