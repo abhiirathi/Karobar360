@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { PackagePlus, Plus, Trash2 } from "lucide-react";
-import { baseCost, cbm, daysSince, dmy, lakh, n0, n2, r2, rs, rs2, today, uid, weightGap } from "@/lib/stone/calc";
+import { baseCost, cbm, daysSince, dmy, lakh, n0, n2, r2, rs, rs2, today, uid, weightCheck, WEIGHT_TOLERANCE } from "@/lib/stone/calc";
 import { nextBlockNo, qualities, qualityOf, split } from "@/lib/stone/costing";
 import { emptyBlock } from "@/lib/stone/seed";
 import type { Block, BlockStatus, Grade, ImportBill, SlabLot, StoneType } from "@/lib/stone/types";
@@ -46,7 +46,7 @@ export default function Purchases({ ctx }: { ctx: Ctx }) {
   const slabLots = db.lots.filter((l) => l.source === "purchase");
   const month = all.filter((x) => daysSince(x.blocks[0].date) <= 30);
   const onRoad = db.blocks.filter((b) => b.source !== "own_mine" && b.status === "in_transit");
-  const short = db.blocks.filter((b) => b.source !== "own_mine" && weightGap(b) > 0.02 && b.status !== "rejected");
+  const short = db.blocks.filter((b) => b.source !== "own_mine" && weightCheck(b)?.flag === "short" && b.status !== "rejected");
   const val = (x: Bill) => x.blocks.reduce((a, b) => a + baseCost(b), 0);
 
   const cols: Col<Bill>[] = [
@@ -55,7 +55,7 @@ export default function Purchases({ ctx }: { ctx: Ctx }) {
     { key: "q", label: "Quality", render: (x) => [...new Set(x.blocks.map((b) => b.variety))].join(", ") },
     { key: "n", label: "Blocks", align: "right", render: (x) => <div><div>{x.blocks.length}</div><div className="max-w-[18ch] truncate text-[0.78rem] text-ink-3">{x.blocks.map((b) => b.no).join(", ")}</div></div>, sort: (x) => x.blocks.length },
     { key: "bt", label: "Billed", align: "right", render: (x) => `${n2(x.blocks.reduce((a, b) => a + b.billedTonnes, 0))} t` },
-    { key: "rt", label: "Received", align: "right", render: (x) => { const r = x.blocks.reduce((a, b) => a + b.tonnes, 0); const bt = x.blocks.reduce((a, b) => a + b.billedTonnes, 0); return r ? <span className={bt && (bt - r) / r > 0.02 ? "text-warn" : ""}>{n2(r)} t</span> : <span className="text-ink-3">Not yet</span>; } },
+    { key: "rt", label: "Received", align: "right", render: (x) => { const r = x.blocks.reduce((a, b) => a + b.tonnes, 0); const bt = x.blocks.reduce((a, b) => a + b.billedTonnes, 0); return r ? <span className={bt && Math.abs(r - bt) / bt > WEIGHT_TOLERANCE ? "font-medium text-neg" : ""}>{n2(r)} t</span> : <span className="text-ink-3">Not yet</span>; } },
     ...(C ? [{ key: "v", label: "Value", align: "right" as const, render: (x: Bill) => rs(val(x)), sort: (x: Bill) => val(x) }] : []),
     { key: "st", label: "Status", render: (x) => { const road = x.blocks.filter((b) => b.status === "in_transit").length; return road ? <Badge tone="warn">{road} on the road</Badge> : <Badge tone="good">Received</Badge>; } },
   ];
@@ -74,7 +74,7 @@ export default function Purchases({ ctx }: { ctx: Ctx }) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {C ? <Stat label="Bought, last 30 days" value={lakh(month.reduce((a, x) => a + val(x), 0))} sub={`${month.length} bills · ${month.reduce((a, x) => a + x.blocks.length, 0)} blocks`} /> : <Stat label="Bills, last 30 days" value={`${month.length}`} sub={`${month.reduce((a, x) => a + x.blocks.length, 0)} blocks`} />}
         <Stat label="On the road" value={`${onRoad.length} blocks`} sub={`${n0(onRoad.reduce((a, b) => a + b.billedTonnes, 0))} t billed, not yet received`} tone={onRoad.length ? "warn" : undefined} />
-        <Stat label="Short weight" value={`${short.length} blocks`} sub={short.length ? `${n2(short.reduce((a, b) => a + b.billedTonnes - b.tonnes, 0))} t less than billed` : "Received matches the bills"} tone={short.length ? "warn" : undefined} />
+        <Stat label="Short weight" value={`${short.length} blocks`} sub={short.length ? `${n2(short.reduce((a, b) => a + b.billedTonnes - b.tonnes, 0))} t less than billed` : "All within ±5% of the bills"} tone={short.length ? "warn" : undefined} />
         <Stat label="Import bills" value={`${all.filter((x) => x.imp).length}`} sub={`${all.filter((x) => !x.imp).length} domestic`} />
       </div>
       <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -238,7 +238,7 @@ function PurchaseForm({ ctx, bill, imp, onClose }: { ctx: Ctx; bill: Bill | null
               </div>
               <div className="mt-2 grid gap-2 sm:grid-cols-6">
                 <F label="Billed qty"><NumIn value={x.billed} onChange={(v) => setLine(i, { billed: v })} suffix="t" /></F>
-                <F label="Received qty" hint={!x.received ? "Fill when it arrives" : x.billed && (x.billed - x.received) / x.received > 0.02 ? `${n2(x.billed - x.received)} t short` : undefined}><NumIn value={x.received} onChange={(v) => setLine(i, { received: v })} suffix="t" /></F>
+                <F label="Received qty" hint={!x.received ? "Fill when it arrives" : x.billed && (x.billed - x.received) / x.billed > WEIGHT_TOLERANCE ? `${n2(x.billed - x.received)} t short` : undefined}><NumIn value={x.received} onChange={(v) => setLine(i, { received: v })} suffix="t" /></F>
                 <F label="Length"><NumIn value={x.l} onChange={(v) => setLine(i, { l: v })} suffix="cm" /></F>
                 <F label="Width"><NumIn value={x.w} onChange={(v) => setLine(i, { w: v })} suffix="cm" /></F>
                 <F label="Height"><NumIn value={x.h} onChange={(v) => setLine(i, { h: v })} suffix="cm" /></F>

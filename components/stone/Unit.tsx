@@ -1,28 +1,28 @@
 "use client";
 import { useMemo, useState } from "react";
 import { AlertTriangle, Check, ChevronRight, Play, Plus, QrCode, Scissors } from "lucide-react";
-import { baseCost, blockCost, cbm, daysSince, dmy, jobCost, n0, n2, perTonne, r2, rs, rs2, spreadDamage, theoreticalSlabs, today, uid, weightGap, damageNet, lakh } from "@/lib/stone/calc";
+import { baseCost, blockCost, cbm, daysSince, dmy, jobCost, n0, n2, perTonne, r2, rs, rs2, spreadDamage, theoreticalSlabs, today, uid, weightCheck, damageNet, lakh } from "@/lib/stone/calc";
 import type { Block, DamageEvent, SawJob, Slab, SlabLot } from "@/lib/stone/types";
 import { nextLotNo, slabArea, slabNo, syncLot } from "@/lib/stone/slabs";
 import { lotCost, lotUnit } from "@/lib/stone/costing";
 import { firmOf } from "@/lib/stone/firms";
 import type { Ctx } from "./StoneApp";
-import { WeighCapture } from "./Weigh";
+import { Weighment } from "./Weigh";
 import BlockForm, { STATUS_LABEL } from "./BlockForm";
 import QrLabels from "./QrLabels";
 import TransferForm from "./Transfer";
 import { Badge, Drawer, F, Grid, Note, NumIn, Section, Sel, Stat, Table, TextIn, Area, type Col } from "./ui";
 
 /** "slabs" and "lots" are steps on the chain that open Inventory → Slabs. */
-type Tab = "yard" | "sawing" | "slabs" | "lots" | "damage";
+type Tab = "yard" | "sawing" | "slabs" | "lots" | "damage" | "weight";
 
 /** The factory floor: blocks in the yard go on the saw and come off as slabs. Stock itself lives under Inventory. */
 export default function Unit({ ctx }: { ctx: Ctx }) {
   const { db, update } = ctx;
   const gate = ctx.can("blocks") !== "none";
   const proc = ctx.can("processing") !== "none";
-  const allowed: Tab[] = [...(gate || proc ? (["yard"] as Tab[]) : []), ...(proc ? (["sawing", "slabs", "damage"] as Tab[]) : [])];
-  const [tabRaw, setTabRaw] = useState<Tab>(["yard", "sawing", "damage"].includes(ctx.sub) ? (ctx.sub as Tab) : "yard");
+  const allowed: Tab[] = [...(gate || proc ? (["yard", "weight"] as Tab[]) : []), ...(proc ? (["sawing", "slabs", "damage"] as Tab[]) : [])];
+  const [tabRaw, setTabRaw] = useState<Tab>(["yard", "sawing", "damage", "weight"].includes(ctx.sub) ? (ctx.sub as Tab) : "yard");
   const setTab = (t: Tab) => (t === "slabs" || t === "lots" ? ctx.go("inventory", "slabs") : setTabRaw(t));
   const tab: Tab = allowed.includes(tabRaw) ? tabRaw : allowed[0] ?? "yard";
   const [labels, setLabels] = useState(false);
@@ -38,6 +38,7 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
   const transit = yard.filter((b) => b.status === "in_transit");
   const waiting = yard.filter((b) => b.status === "in_yard");
   const onSaw = yard.filter((b) => b.status === "on_saw");
+  const flagged = db.blocks.filter((b) => !["rejected", "in_transit", "at_mine"].includes(b.status) && weightCheck(b)?.flag);
   const slabsInStock = db.lots.reduce((a, l) => a + (l.slabs?.filter((x) => x.status === "stock").length ?? 0), 0);
   const unitLots = db.lots.filter((l) => l.site === "unit" && l.available > 0);
   const jobsMonth = db.jobs.filter((j) => daysSince(j.finishedOn) <= 30);
@@ -61,7 +62,7 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
   const yardCols: Col<Block>[] = [
     { key: "no", label: "Block", render: (b) => <div><div className="font-medium">{b.no}</div><div className="text-[0.8rem] text-ink-3">{b.variety} · {b.grade}</div></div>, sort: (b) => b.no },
     { key: "src", label: "From", render: (b) => <div><div>{b.source === "own_mine" ? "Own quarry" : b.source === "import" ? "Import" : db.parties.find((p) => p.id === b.supplierId)?.company ?? "—"}</div><div className="text-[0.8rem] text-ink-3">{b.vehicleNo}</div></div> },
-    { key: "t", label: "Tonnes", align: "right", render: (b) => { const g = weightGap(b); return <div><div>{n2(b.tonnes || b.billedTonnes)}</div>{g > 0.02 && <div className="text-[0.78rem] text-warn">billed {n2(b.billedTonnes)}</div>}{b.weigh?.source === "weighbridge" && b.weigh.tare !== undefined && <div className="text-[0.78rem] text-accent">weighbridge</div>}</div>; }, sort: (b) => b.tonnes },
+    { key: "t", label: "Tonnes", align: "right", render: (b) => { const c = weightCheck(b); return <div><div>{n2(b.tonnes || b.billedTonnes)}</div>{c?.flag && <div className="text-[0.78rem] font-medium text-neg">{c.flag === "short" ? "short" : "over"} {(Math.abs(c.pct) * 100).toFixed(1)}% vs {n2(b.billedTonnes)}</div>}</div>; }, sort: (b) => b.tonnes },
     ...(C ? [{ key: "c", label: "₹ / tonne", align: "right" as const, render: (b: Block) => <div><div>{b.tonnes ? rs(perTonne(b)) : "—"}</div>{b.damageAlloc > 0 && <div className="text-[0.78rem] text-warn">+{rs(b.damageAlloc)} damage</div>}</div>, sort: (b: Block) => perTonne(b) }] : []),
     { key: "age", label: "In yard", align: "right", render: (b) => b.receivedOn ? `${daysSince(b.receivedOn)} d` : "—", sort: (b) => (b.receivedOn ? daysSince(b.receivedOn) : -1) },
     { key: "st", label: "Status", render: (b) => <Badge tone={b.status === "in_transit" ? "warn" : b.status === "on_saw" ? "good" : "plain"}>{STATUS_LABEL[b.status]}</Badge> },
@@ -105,6 +106,7 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
           sub: `${n0(jobsMonth.reduce((a, j) => a + j.sqft, 0))} sq ft cut in 30 days`,
           todo: unitLots.length ? { text: `${unitLots.length} lots at the unit to send on`, go: "lots" } : undefined },
       ]} links={["Load on saw", "Slabs out"]} filters={[
+        { key: "weight", label: "Weight flags", count: flagged.length, warn: true },
         { key: "damage", label: "Damage & loss", count: db.damages.length, warn: true },
       ]} actions={<>
         {tab === "yard" && <button className="btn btn-quiet btn-sm" onClick={() => setLabels(true)}><QrCode size={15} />QR labels</button>}
@@ -128,6 +130,7 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
         {tab === "yard" && <Table rows={yard} cols={yardCols} onRow={setEdit} search={(b) => `${b.no} ${b.variety} ${b.vehicleNo}`} empty="No blocks in the yard. Blocks dispatched from mines show up here." />}
         {tab === "sawing" && <Table rows={[...db.jobs].reverse()} cols={jobCols} search={(j) => `${db.blocks.find((b) => b.id === j.blockId)?.no} ${j.machine}`} empty="No blocks sawn yet." />}
         {tab === "damage" && <DamageList ctx={ctx} onOpen={setDmg} />}
+        {tab === "weight" && <WeightFlags ctx={ctx} rows={flagged} onOpen={setEdit} />}
       </div>
 
       {labels && <QrLabels ctx={ctx} blocks={yard} onClose={() => setLabels(false)} />}
@@ -140,27 +143,41 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
   );
 }
 
+/** Blocks whose gate weight is more than ±5% away from what the supplier quoted. */
+function WeightFlags({ ctx, rows, onOpen }: { ctx: Ctx; rows: Block[]; onOpen: (b: Block) => void }) {
+  const sup = (b: Block) => (b.source === "own_mine" ? "Own quarry" : b.source === "import" ? "Import" : ctx.db.parties.find((p) => p.id === b.supplierId)?.company ?? "—");
+  const cols: Col<Block>[] = [
+    { key: "no", label: "Block", render: (b) => <div><div className="font-medium">{b.no}</div><div className="text-[0.8rem] text-ink-3">{b.variety} · {b.receivedOn ? dmy(b.receivedOn) : "—"}</div></div>, sort: (b) => b.receivedOn ?? "" },
+    { key: "s", label: "Supplier", render: (b) => <div><div>{sup(b)}</div><div className="text-[0.8rem] text-ink-3">{b.invoiceNo || b.eRawanna || "No bill no."}</div></div>, sort: sup },
+    { key: "q", label: "Quoted", align: "right", render: (b) => `${n2(b.billedTonnes)} t` },
+    { key: "r", label: "Received", align: "right", render: (b) => `${n2(b.tonnes)} t` },
+    { key: "d", label: "Difference", align: "right", render: (b) => { const c = weightCheck(b)!; return <div className="font-medium text-neg"><div>{c.diff > 0 ? "+" : "−"}{n2(Math.abs(c.diff))} t</div><div className="text-[0.78rem]">{c.diff > 0 ? "+" : "−"}{(Math.abs(c.pct) * 100).toFixed(1)}%</div></div>; }, sort: (b) => weightCheck(b)!.pct },
+    ...(ctx.costs ? [{ key: "v", label: "Value", align: "right" as const, render: (b: Block) => rs(Math.abs(weightCheck(b)!.diff) * b.rate) }] : []),
+    { key: "f", label: "", render: (b) => <Badge tone="neg">{weightCheck(b)!.flag === "short" ? "Received less" : "Received more"}</Badge> },
+  ];
+  return (
+    <div>
+      <p className="mb-3 text-[0.86rem] text-ink-2">Gate weight (A − B) more than ±5% away from the supplier&apos;s bill or rawanna. Short ones mean the supplier billed for stone the unit didn&apos;t receive: raise a debit note.</p>
+      <Table rows={rows} cols={cols} onRow={onOpen} search={(b) => `${b.no} ${b.variety} ${sup(b)}`} empty="No weight mismatches. Every received block is within ±5% of the supplier's weight." />
+    </div>
+  );
+}
+
 const pendingMachine: Record<string, string> = {};
 
 function ReceiveForm({ ctx, block, density, onSave, onClose }: { ctx: Ctx; block: Block; density: number; onSave: (b: Block, damaged: boolean) => void; onClose: () => void }) {
-  const [b, setB] = useState<Block>({ ...block, receivedOn: today() });
+  // The gate weight starts empty: it has to be weighed (A − B) or typed, not copied from the bill.
+  const [b, setB] = useState<Block>({ ...block, receivedOn: today(), tonnes: block.weigh?.gross && block.weigh?.tare ? block.tonnes : 0 });
   const [damaged, setDamaged] = useState(false);
   const set = <K extends keyof Block>(k: K, v: Block[K]) => setB((x) => ({ ...x, [k]: v }));
-  const gap = weightGap(b);
   return (
     <Drawer open title={`Receive ${block.no}`} sub={`${block.variety} · ${block.vehicleNo || "vehicle not noted"}`} onClose={onClose}
       footer={<>
-        <button className="btn btn-primary" onClick={() => onSave({ ...b, status: "in_yard", defects: damaged && !b.defects ? "Damaged in transit / unloading" : b.defects }, damaged)}>{damaged ? "Receive and record damage" : "Receive into yard"}</button>
+        <button className="btn btn-primary" onClick={() => onSave({ ...b, tonnes: b.tonnes || b.billedTonnes, status: "in_yard", defects: damaged && !b.defects ? "Damaged in transit / unloading" : b.defects }, damaged)}>{damaged ? "Receive and record damage" : "Receive into yard"}</button>
         <button className="btn btn-quiet" onClick={onClose}>Cancel</button>
       </>}>
-      <Section title="Weighbridge">
-        <WeighCapture ctx={ctx} block={b} onChange={(p) => setB((x) => ({ ...x, ...p }))} />
-        <div className="mt-4"><Grid cols={3}>
-          <F label="Net weight at gate"><NumIn value={b.tonnes} onChange={(v) => set("tonnes", v)} suffix="t" /></F>
-          <F label="Billed / rawanna"><NumIn value={b.billedTonnes} onChange={(v) => set("billedTonnes", v)} suffix="t" /></F>
-          <F label="Slip no."><TextIn value={b.weighSlip} onChange={(v) => set("weighSlip", v)} upper /></F>
-        </Grid></div>
-        {gap > 0.02 && <div className="mt-3"><Note tone="warn">{(gap * 100).toFixed(1)}% short of the bill: {n2(b.billedTonnes - b.tonnes)} t, about {rs((b.billedTonnes - b.tonnes) * b.rate)}.</Note></div>}
+      <Section title="Weighment">
+        <Weighment ctx={ctx} block={b} onChange={(p) => setB((x) => ({ ...x, ...p }))} />
       </Section>
       <Section title="Measured size">
         <Grid cols={3}>

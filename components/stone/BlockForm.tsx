@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { ArrowRightLeft, Camera, Trash2 } from "lucide-react";
-import { baseCost, cbm, mineMonth, months, n2, purchaseValue, rs, today, uid, weightGap } from "@/lib/stone/calc";
+import { baseCost, cbm, mineMonth, months, n2, purchaseValue, rs, today, uid, weightCheck } from "@/lib/stone/calc";
 import { emptyBlock } from "@/lib/stone/seed";
 import { ownMines, qualities } from "@/lib/stone/costing";
 import type { Block, BlockStatus, StoneDB } from "@/lib/stone/types";
@@ -71,7 +71,7 @@ export default function BlockForm({ db, initial, mode, onSave, onDelete, onClose
 
   const vol = cbm(b);
   const estT = vol * S.density;
-  const gap = weightGap(b);
+  const wc = weightCheck(b);
   const suggestRoyalty = Math.round((b.billedTonnes || b.tonnes || estT) * S.royaltyPerTonne);
   const total = baseCost(b) + b.damageAlloc;
   const suppliers = db.parties.filter((p) => p.kind === "supplier");
@@ -161,7 +161,7 @@ export default function BlockForm({ db, initial, mode, onSave, onDelete, onClose
           <F label="Weighbridge slip no."><TextIn value={b.weighSlip} onChange={(v) => set("weighSlip", v)} upper /></F>
           {isOwn && <F label="Weight on rawanna"><NumIn value={b.billedTonnes} onChange={(v) => set("billedTonnes", v)} suffix="t" /></F>}
         </Grid>
-        {gap > 0.02 && <div className="mt-3"><Note tone="warn">Billed {n2(b.billedTonnes)} t but weighed {n2(b.tonnes)} t at the gate: {(gap * 100).toFixed(1)}% short{costs ? `, about ${rs((b.billedTonnes - b.tonnes) * b.rate)} at this rate` : ""}. Raise a debit note with the supplier.</Note></div>}
+        {wc?.flag && <div className="mt-3"><Note tone="neg">Supplier quoted {n2(b.billedTonnes)} t but the gate weighed {n2(b.tonnes)} t: {(Math.abs(wc.pct) * 100).toFixed(1)}% {wc.flag === "short" ? "short" : "more"}, outside ±5%{wc.flag === "short" && costs ? `, about ${rs(-wc.diff * b.rate)} at this rate. Raise a debit note with the supplier` : ""}.</Note></div>}
       </Section>
 
       {b.source !== "import" && (
