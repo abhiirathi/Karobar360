@@ -3,15 +3,17 @@ import { useState } from "react";
 import { Camera, Check, Factory, Truck } from "lucide-react";
 import { cbm, dmy, n2, today } from "@/lib/stone/calc";
 import type { Ctx } from "./StoneApp";
+import type { Block } from "@/lib/stone/types";
 import { STATUS_LABEL } from "./BlockForm";
-import { Badge, F, NumIn, Note, readPhoto } from "./ui";
+import { Badge, Note, readPhoto } from "./ui";
+import { WeighCapture } from "./Weigh";
 import { fileSrc } from "./files";
 
 /** What a phone sees after scanning a block's QR label. */
 export default function Scan({ ctx, blockId }: { ctx: Ctx; blockId: string }) {
   const { db, update, go } = ctx;
   const b = ctx.root.blocks.find((x) => x.id === blockId);
-  const [tonnes, setTonnes] = useState(b?.tonnes || 0);
+  const [wb, setWb] = useState<Partial<Block>>({});
   const [done, setDone] = useState("");
   if (!b) {
     return (
@@ -27,7 +29,7 @@ export default function Scan({ ctx, blockId }: { ctx: Ctx; blockId: string }) {
   const canSaw = ctx.edit("processing");
 
   const receive = () => {
-    update((d) => { const x = d.blocks.find((y) => y.id === b.id)!; x.status = "in_yard"; x.receivedOn = x.receivedOn || today(); if (tonnes > 0) x.tonnes = tonnes; });
+    update((d) => { const x = d.blocks.find((y) => y.id === b.id)!; x.status = "in_yard"; x.receivedOn = x.receivedOn || today(); Object.assign(x, wb); });
     setDone("Received in the yard");
   };
   const toSaw = () => {
@@ -66,7 +68,8 @@ export default function Scan({ ctx, blockId }: { ctx: Ctx; blockId: string }) {
       <div className="mt-4 space-y-3">
         {canGate && (b.status === "in_transit" || b.status === "at_mine") && (
           <div className="rounded-2xl bg-surface p-4">
-            <F label="Weighbridge net (optional)" hint={b.billedTonnes ? `Billed ${n2(b.billedTonnes)} t` : undefined}><NumIn value={tonnes} onChange={setTonnes} suffix="t" /></F>
+            <div className="mb-2 text-sm font-medium">Weighbridge (optional){b.billedTonnes ? <span className="font-normal text-ink-3"> · billed {n2(b.billedTonnes)} t</span> : null}</div>
+            <WeighCapture ctx={ctx} block={{ ...b, ...wb }} onChange={(p) => setWb((x) => ({ ...x, ...p }))} />
             <button className="btn btn-primary mt-3 w-full justify-center py-3" onClick={receive}><Truck size={16} />Received at the gate</button>
           </div>
         )}

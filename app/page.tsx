@@ -6,6 +6,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { ClusterLinks, HeroPreview, ModuleExplorer } from "@/components/Landing";
 import { PLANS } from "@/lib/pricing";
 import IndustryGrid from "@/components/Industries";
+import TrustedBy from "@/components/TrustedBy";
 
 const d = (ms: number) => ({ ["--d" as string]: `${ms}ms` }) as React.CSSProperties;
 
@@ -31,7 +32,7 @@ export default function Home() {
       </header>
 
       <main>
-        <section className="mx-auto grid max-w-7xl items-center gap-14 px-5 pb-28 pt-14 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:pt-20">
+        <section className="mx-auto grid max-w-7xl items-center gap-14 px-5 pb-16 pt-14 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:pt-20">
           <div>
             <h1 className="display reveal text-[3.1rem] font-semibold sm:text-[4.6rem]" style={d(0)}>Software that runs your way.</h1>
             <p className="reveal mt-7 max-w-[34rem] text-lg leading-relaxed text-ink-2 sm:text-xl" style={d(80)}>
@@ -45,6 +46,8 @@ export default function Home() {
           </div>
           <div className="reveal" style={d(200)}><HeroPreview /></div>
         </section>
+
+        <TrustedBy />
 
         <section id="industries" className="mx-auto max-w-7xl px-5 pb-28 sm:px-8 lg:pb-36">
           <div className="grid gap-6 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-end lg:gap-16">
@@ -185,7 +188,7 @@ export default function Home() {
               </tbody>
             </table>
           </div>
-          <p className="mt-6 text-sm text-ink-3">Setup starts at ₹35,000. Prices exclude GST.</p>
+          <p className="mt-6 text-sm text-ink-3">Setup starts at ₹35,000. Prices exclude GST. <Link href="/pricing" className="text-accent hover:underline">See what each plan includes, or ask for a custom price</Link>.</p>
         </section>
 
         <section className="bg-accent text-accent-ink">

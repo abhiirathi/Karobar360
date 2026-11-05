@@ -6,6 +6,7 @@ import type { Ctx } from "./StoneApp";
 import { MODULE_INFO, hasBlocks, modulesOf } from "@/lib/stone/modules";
 import { F, Grid, Note, NumIn, Section, Sel, TextIn } from "./ui";
 import FirmsSettings from "./Firms";
+import { WeighbridgeSettings } from "./Weigh";
 
 export default function SettingsView({ ctx }: { ctx: Ctx }) {
   const { db, update, reset, replace } = ctx;
@@ -104,6 +105,7 @@ export default function SettingsView({ ctx }: { ctx: Ctx }) {
           <F label="Labour"><NumIn value={s.labourPerSqft} onChange={(v) => set("labourPerSqft", v)} suffix="₹/sq ft" /></F>
         </Grid>
       </Section>}
+      {canEdit && hasBlocks(M) && <WeighbridgeSettings ctx={ctx} />}
       {owner && <Cleanup s={s} db={db} onChange={(p) => set("purge", p)} />}
       <div className="mt-6 flex flex-wrap items-center gap-2">
         <button className="btn btn-primary" disabled={!canEdit} onClick={save}>Save settings</button>

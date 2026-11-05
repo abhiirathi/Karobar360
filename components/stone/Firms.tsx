@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Building2, Plus } from "lucide-react";
 import { STATES, checkGstin, uid } from "@/lib/stone/calc";
-import { FIRM_KINDS, firmOf, kindLabel, kindModules } from "@/lib/stone/firms";
+import { FIRM_KINDS, firmOf, firmsOf, kindLabel, kindModules } from "@/lib/stone/firms";
 import { MODULE_INFO, modulesOf } from "@/lib/stone/modules";
 import type { Firm, FirmKind } from "@/lib/stone/types";
 import type { Ctx } from "./StoneApp";
@@ -30,13 +30,13 @@ export default function FirmsSettings({ ctx }: { ctx: Ctx }) {
         </div>
       ) : (
         <ul className="divide-y divide-surface-2 rounded-2xl bg-surface">
-          {firms.map((f, i) => {
+          {firms.map((f) => {
             const c = count(f.id);
             return (
               <li key={f.id}>
                 <button className="focusable flex w-full flex-wrap items-center gap-3 px-4 py-3 text-left hover:bg-surface-2/50" onClick={() => owner && setEdit(f)}>
                   <div className="min-w-[200px] flex-1">
-                    <div className="font-medium">{f.name} {i === 0 && <Badge>Main</Badge>}</div>
+                    <div className="font-medium">{f.name} {f.id === firmsOf(R.settings)[0]?.id && <Badge>Main</Badge>}</div>
                     <div className="text-[0.82rem] text-ink-3">{kindLabel(f.kind)} · {f.gstin || "No GSTIN"} · {f.city}</div>
                   </div>
                   <div className="text-[0.82rem] text-ink-2">{c.blocks} blocks · {c.lots} lots · {c.sales} invoices</div>
@@ -62,7 +62,7 @@ export default function FirmsSettings({ ctx }: { ctx: Ctx }) {
 
 function FirmForm({ ctx, firm, onClose, used }: { ctx: Ctx; firm: Firm | null; onClose: () => void; used: boolean }) {
   const R = ctx.root.settings;
-  const first = ctx.firms[0];
+  const first = firmsOf(ctx.root.settings)[0];
   const [f, setF] = useState<Firm>(() => firm ? structuredClone(firm) : { id: "", name: "", kind: "processing", gstin: "", address: "", city: R.city, state: R.state, pincode: "", phone: R.phone, invoicePrefix: "", modules: kindModules("processing") });
   const [err, setErr] = useState("");
   const set = <K extends keyof Firm>(k: K, v: Firm[K]) => setF((x) => ({ ...x, [k]: v }));

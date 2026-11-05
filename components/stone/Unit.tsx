@@ -1,26 +1,29 @@
 "use client";
 import { useMemo, useState } from "react";
-import { AlertTriangle, Play, Plus, QrCode, Scissors } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Play, Plus, QrCode, Scissors } from "lucide-react";
 import { baseCost, blockCost, cbm, daysSince, dmy, jobCost, n0, n2, perTonne, r2, rs, rs2, spreadDamage, theoreticalSlabs, today, uid, weightGap, damageNet, lakh } from "@/lib/stone/calc";
 import type { Block, DamageEvent, SawJob, Slab, SlabLot } from "@/lib/stone/types";
 import { nextLotNo, slabArea, slabNo, syncLot } from "@/lib/stone/slabs";
 import { lotCost, lotUnit } from "@/lib/stone/costing";
 import { firmOf } from "@/lib/stone/firms";
 import type { Ctx } from "./StoneApp";
+import { WeighCapture } from "./Weigh";
 import BlockForm, { STATUS_LABEL } from "./BlockForm";
 import QrLabels from "./QrLabels";
 import TransferForm from "./Transfer";
-import { Badge, Drawer, F, Grid, Note, NumIn, Section, Sel, Seg, Stat, Table, TextIn, Area, type Col } from "./ui";
+import { Badge, Drawer, F, Grid, Note, NumIn, Section, Sel, Stat, Table, TextIn, Area, type Col } from "./ui";
 
-type Tab = "yard" | "sawing" | "damage";
+/** "slabs" and "lots" are steps on the chain that open Inventory → Slabs. */
+type Tab = "yard" | "sawing" | "slabs" | "lots" | "damage";
 
 /** The factory floor: blocks in the yard go on the saw and come off as slabs. Stock itself lives under Inventory. */
 export default function Unit({ ctx }: { ctx: Ctx }) {
   const { db, update } = ctx;
   const gate = ctx.can("blocks") !== "none";
   const proc = ctx.can("processing") !== "none";
-  const allowed: Tab[] = [...(gate || proc ? (["yard"] as Tab[]) : []), ...(proc ? (["sawing", "damage"] as Tab[]) : [])];
-  const [tabRaw, setTab] = useState<Tab>((ctx.sub as Tab) || "yard");
+  const allowed: Tab[] = [...(gate || proc ? (["yard"] as Tab[]) : []), ...(proc ? (["sawing", "slabs", "damage"] as Tab[]) : [])];
+  const [tabRaw, setTabRaw] = useState<Tab>(["yard", "sawing", "damage"].includes(ctx.sub) ? (ctx.sub as Tab) : "yard");
+  const setTab = (t: Tab) => (t === "slabs" || t === "lots" ? ctx.go("inventory", "slabs") : setTabRaw(t));
   const tab: Tab = allowed.includes(tabRaw) ? tabRaw : allowed[0] ?? "yard";
   const [labels, setLabels] = useState(false);
   const [send, setSend] = useState<Block | null>(null);
@@ -32,6 +35,10 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
 
   const yard = db.blocks.filter((b) => ["in_transit", "in_yard", "on_saw"].includes(b.status));
   const inYard = yard.filter((b) => b.status !== "in_transit");
+  const transit = yard.filter((b) => b.status === "in_transit");
+  const waiting = yard.filter((b) => b.status === "in_yard");
+  const onSaw = yard.filter((b) => b.status === "on_saw");
+  const slabsInStock = db.lots.reduce((a, l) => a + (l.slabs?.filter((x) => x.status === "stock").length ?? 0), 0);
   const unitLots = db.lots.filter((l) => l.site === "unit" && l.available > 0);
   const jobsMonth = db.jobs.filter((j) => daysSince(j.finishedOn) <= 30);
   const varAvg = useMemo(() => {
@@ -54,7 +61,7 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
   const yardCols: Col<Block>[] = [
     { key: "no", label: "Block", render: (b) => <div><div className="font-medium">{b.no}</div><div className="text-[0.8rem] text-ink-3">{b.variety} · {b.grade}</div></div>, sort: (b) => b.no },
     { key: "src", label: "From", render: (b) => <div><div>{b.source === "own_mine" ? "Own quarry" : b.source === "import" ? "Import" : db.parties.find((p) => p.id === b.supplierId)?.company ?? "—"}</div><div className="text-[0.8rem] text-ink-3">{b.vehicleNo}</div></div> },
-    { key: "t", label: "Tonnes", align: "right", render: (b) => { const g = weightGap(b); return <div><div>{n2(b.tonnes || b.billedTonnes)}</div>{g > 0.02 && <div className="text-[0.78rem] text-warn">billed {n2(b.billedTonnes)}</div>}</div>; }, sort: (b) => b.tonnes },
+    { key: "t", label: "Tonnes", align: "right", render: (b) => { const g = weightGap(b); return <div><div>{n2(b.tonnes || b.billedTonnes)}</div>{g > 0.02 && <div className="text-[0.78rem] text-warn">billed {n2(b.billedTonnes)}</div>}{b.weigh?.source === "weighbridge" && b.weigh.tare !== undefined && <div className="text-[0.78rem] text-accent">weighbridge</div>}</div>; }, sort: (b) => b.tonnes },
     ...(C ? [{ key: "c", label: "₹ / tonne", align: "right" as const, render: (b: Block) => <div><div>{b.tonnes ? rs(perTonne(b)) : "—"}</div>{b.damageAlloc > 0 && <div className="text-[0.78rem] text-warn">+{rs(b.damageAlloc)} damage</div>}</div>, sort: (b: Block) => perTonne(b) }] : []),
     { key: "age", label: "In yard", align: "right", render: (b) => b.receivedOn ? `${daysSince(b.receivedOn)} d` : "—", sort: (b) => (b.receivedOn ? daysSince(b.receivedOn) : -1) },
     { key: "st", label: "Status", render: (b) => <Badge tone={b.status === "in_transit" ? "warn" : b.status === "on_saw" ? "good" : "plain"}>{STATUS_LABEL[b.status]}</Badge> },
@@ -87,18 +94,35 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
         {C ? <Stat label="Slab cost, last 60 days" value={`${rs2(avgCost)}/sq ft`} sub="Block, royalty, freight, damage, sawing and stores" /> : <Stat label="Slabs at unit" value={`${n0(unitLots.reduce((a, l) => a + l.available, 0))} sq ft`} sub={`${unitLots.length} lots`} />}
       </div>
 
-      <div className="mt-8 flex flex-wrap items-center gap-3">
-        <Seg value={tab} onChange={setTab} tabs={([
-          { key: "yard", label: "Block yard", count: yard.length },
-          { key: "sawing", label: "Sawing log", count: db.jobs.length },
-          { key: "damage", label: "Damage & loss", count: db.damages.length },
-        ] as { key: Tab; label: string; count: number }[]).filter((t) => allowed.includes(t.key))} />
-        <div className="ml-auto flex gap-2">
-          {tab === "yard" && <button className="btn btn-quiet btn-sm" onClick={() => setLabels(true)}><QrCode size={15} />QR labels</button>}
-          {tab === "yard" && ctx.edit("blocks") && <button className="btn btn-quiet btn-sm" onClick={() => ctx.go("purchases")}><Plus size={15} />New purchase</button>}
-          {tab === "damage" && ctx.edit("processing") && <button className="btn btn-primary btn-sm" onClick={() => setDmg("new")}><AlertTriangle size={14} />Record damage</button>}
+      <ProcessChain tab={tab} setTab={setTab} allowed={allowed} stages={[
+        { key: "yard", title: "Block yard", count: yard.length, unit: "blocks",
+          sub: `${transit.length} on the road · ${waiting.length} waiting`,
+          todo: transit.length ? { text: `${transit.length} to receive at the gate`, go: "yard" } : waiting.length ? { text: `${waiting.length} ready for the saw`, go: "yard" } : undefined },
+        { key: "sawing", title: "Sawing", count: onSaw.length, unit: "on the saw",
+          sub: `${jobsMonth.length} blocks sawn in 30 days`,
+          todo: onSaw.length ? { text: `${onSaw.length} to record slabs out`, go: "sawing" } : undefined },
+        { key: "slabs", title: "Slabs", count: slabsInStock, unit: "in stock",
+          sub: `${n0(jobsMonth.reduce((a, j) => a + j.sqft, 0))} sq ft cut in 30 days`,
+          todo: unitLots.length ? { text: `${unitLots.length} lots at the unit to send on`, go: "lots" } : undefined },
+      ]} links={["Load on saw", "Slabs out"]} filters={[
+        { key: "damage", label: "Damage & loss", count: db.damages.length, warn: true },
+      ]} actions={<>
+        {tab === "yard" && <button className="btn btn-quiet btn-sm" onClick={() => setLabels(true)}><QrCode size={15} />QR labels</button>}
+        {tab === "yard" && ctx.edit("blocks") && <button className="btn btn-quiet btn-sm" onClick={() => ctx.go("purchases")}><Plus size={15} />New purchase</button>}
+        {tab === "damage" && ctx.edit("processing") && <button className="btn btn-primary btn-sm" onClick={() => setDmg("new")}><AlertTriangle size={14} />Record damage</button>}
+      </>} />
+
+      {tab === "sawing" && onSaw.length > 0 && (
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {onSaw.map((b) => (
+            <div key={b.id} className="flex items-center gap-3 rounded-2xl bg-accent-soft px-4 py-3">
+              <Scissors size={16} className="shrink-0 text-accent" />
+              <div className="min-w-0 flex-1"><div className="font-medium">{b.no} is on the saw</div><div className="text-[0.82rem] text-ink-2">{b.variety} · {n2(b.tonnes || b.billedTonnes)} t</div></div>
+              {ctx.edit("processing") && <button className="btn btn-primary btn-sm" onClick={() => setSaw(b)}>Slabs out</button>}
+            </div>
+          ))}
         </div>
-      </div>
+      )}
 
       <div className="mt-4">
         {tab === "yard" && <Table rows={yard} cols={yardCols} onRow={setEdit} search={(b) => `${b.no} ${b.variety} ${b.vehicleNo}`} empty="No blocks in the yard. Blocks dispatched from mines show up here." />}
@@ -108,7 +132,7 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
 
       {labels && <QrLabels ctx={ctx} blocks={yard} onClose={() => setLabels(false)} />}
       {edit && <BlockForm costs={C} db={db} initial={edit} mode="edit" onTransfer={ctx.firms.length > 1 && ctx.edit("blocks") ? () => { setSend(edit); setEdit(null); } : undefined} onClose={() => setEdit(null)} onSave={(b) => { putBlock(b); setEdit(null); }} onDelete={(id) => { update((d) => { d.blocks = d.blocks.filter((x) => x.id !== id); }); setEdit(null); }} />}
-      {receive && <ReceiveForm block={receive} density={db.settings.density} onClose={() => setReceive(null)} onSave={(b, damaged) => { putBlock(b); setReceive(null); if (damaged) { setTab("damage"); setDmg("new"); } }} />}
+      {receive && <ReceiveForm ctx={ctx} block={receive} density={db.settings.density} onClose={() => setReceive(null)} onSave={(b, damaged) => { putBlock(b); setReceive(null); if (damaged) { setTab("damage"); setDmg("new"); } }} />}
       {send && <TransferForm ctx={ctx} item={send} kind="block" onClose={() => setSend(null)} />}
       {saw && <SawForm ctx={ctx} block={saw} onClose={() => setSaw(null)} onDone={() => { setSaw(null); ctx.go("inventory", "slabs"); }} />}
       {dmg && <DamageForm ctx={ctx} initial={dmg === "new" ? null : dmg} onClose={() => setDmg(null)} />}
@@ -118,7 +142,7 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
 
 const pendingMachine: Record<string, string> = {};
 
-function ReceiveForm({ block, density, onSave, onClose }: { block: Block; density: number; onSave: (b: Block, damaged: boolean) => void; onClose: () => void }) {
+function ReceiveForm({ ctx, block, density, onSave, onClose }: { ctx: Ctx; block: Block; density: number; onSave: (b: Block, damaged: boolean) => void; onClose: () => void }) {
   const [b, setB] = useState<Block>({ ...block, receivedOn: today() });
   const [damaged, setDamaged] = useState(false);
   const set = <K extends keyof Block>(k: K, v: Block[K]) => setB((x) => ({ ...x, [k]: v }));
@@ -130,11 +154,12 @@ function ReceiveForm({ block, density, onSave, onClose }: { block: Block; densit
         <button className="btn btn-quiet" onClick={onClose}>Cancel</button>
       </>}>
       <Section title="Weighbridge">
-        <Grid cols={3}>
+        <WeighCapture ctx={ctx} block={b} onChange={(p) => setB((x) => ({ ...x, ...p }))} />
+        <div className="mt-4"><Grid cols={3}>
           <F label="Net weight at gate"><NumIn value={b.tonnes} onChange={(v) => set("tonnes", v)} suffix="t" /></F>
           <F label="Billed / rawanna"><NumIn value={b.billedTonnes} onChange={(v) => set("billedTonnes", v)} suffix="t" /></F>
           <F label="Slip no."><TextIn value={b.weighSlip} onChange={(v) => set("weighSlip", v)} upper /></F>
-        </Grid>
+        </Grid></div>
         {gap > 0.02 && <div className="mt-3"><Note tone="warn">{(gap * 100).toFixed(1)}% short of the bill: {n2(b.billedTonnes - b.tonnes)} t, about {rs((b.billedTonnes - b.tonnes) * b.rate)}.</Note></div>}
       </Section>
       <Section title="Measured size">
@@ -496,5 +521,61 @@ export function MoveForm({ lot, onSave, onClose }: { lot: SlabLot; onSave: (frei
         <F label="Depot rack / A-frame"><TextIn value={loc} onChange={setLoc} /></F>
       </Grid>
     </Drawer>
+  );
+}
+
+type Stage = { key: Tab; title: string; count: number; unit: string; sub: string; todo?: { text: string; go: Tab } };
+
+/** The unit as a chain: steps spread across the full width, joined by one line running left to right. */
+function ProcessChain({ tab, setTab, allowed, stages, links, filters, actions }: {
+  tab: Tab; setTab: (t: Tab) => void; allowed: Tab[]; stages: Stage[]; links: string[];
+  filters: { key: Tab; label: string; count: number; warn?: boolean }[]; actions: React.ReactNode;
+}) {
+  const shown = stages.filter((s) => allowed.includes(s.key));
+  const active = (k: Tab) => tab === k || (k === "slabs" && tab === "lots");
+  const cur = stages.find((s) => active(s.key));
+  return (
+    <div className="mt-6">
+      <ol className="scroll-thin -mx-1 flex items-center overflow-x-auto px-1 pb-1 pt-1 sm:pt-5" aria-label="Processing steps">
+        {shown.map((s, i) => {
+          const on = active(s.key);
+          const idx = stages.findIndex((x) => x.key === s.key);
+          const last = i === shown.length - 1;
+          return (
+            <li key={s.key} className={`flex items-center ${last ? "shrink-0" : "flex-1 sm:min-w-[150px]"}`}>
+              <button type="button" onClick={() => setTab(s.key)} aria-current={on ? "step" : undefined} title={s.todo?.text ?? "All caught up"}
+                className={`focusable relative inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full pl-1.5 pr-3.5 text-[0.88rem] font-medium transition-colors ${on ? "bg-accent text-accent-ink shadow-sm" : "bg-surface text-ink hover:bg-surface-2"}`}>
+                <span className={`num grid h-6 w-6 place-items-center rounded-full text-[0.72rem] font-semibold ${on ? "bg-accent-ink/20" : "bg-surface-2 text-ink-2"}`}>{idx + 1}</span>
+                {s.title}
+                <span className={`num ${on ? "opacity-80" : "text-ink-3"}`}>{n0(s.count)}</span>
+                {s.todo && <span className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-warn ring-2 ${on ? "ring-accent" : "ring-ground"}`} aria-label="Needs attention" />}
+              </button>
+              {!last && (
+                <span className="relative flex min-w-[28px] flex-1 items-center pl-2 pr-1" aria-hidden>
+                  <span className="h-[2px] flex-1 rounded-full bg-accent/45" />
+                  <ChevronRight size={16} strokeWidth={2.5} className="-ml-[7px] shrink-0 text-accent/70" />
+                  <span className="absolute inset-x-0 -top-4 hidden text-center text-[0.68rem] sm:block font-medium uppercase tracking-wide text-ink-3">{links[idx]}</span>
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {cur && (
+        <p className="mt-2 flex flex-wrap items-center gap-x-2 text-[0.84rem] text-ink-3">
+          <span>{cur.sub}</span>
+          <span aria-hidden>·</span>
+          {cur.todo ? <span className="inline-flex items-center gap-1.5 font-medium text-warn"><span className="h-1.5 w-1.5 rounded-full bg-warn" />{cur.todo.text}</span> : <span className="inline-flex items-center gap-1 font-medium text-accent"><Check size={13} />All caught up</span>}
+        </p>
+      )}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {filters.filter((f) => allowed.includes(f.key)).map((f) => (
+          <button key={f.key} type="button" className="chip !h-9" data-on={tab === f.key} onClick={() => setTab(tab === f.key ? (f.key === "lots" ? "slabs" : "yard") : f.key)}>
+            {f.label}<span className={`num ml-1.5 ${f.warn && f.count ? "text-warn" : "opacity-70"}`}>{f.count}</span>
+          </button>
+        ))}
+        <div className="ml-auto flex flex-wrap gap-2">{actions}</div>
+      </div>
+    </div>
   );
 }

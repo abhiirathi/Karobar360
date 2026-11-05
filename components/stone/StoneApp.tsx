@@ -1,14 +1,14 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BookOpenCheck, Boxes, Building2, Check, ChevronDown, ChevronsUpDown, Globe, LifeBuoy, Factory, ReceiptText, LayoutDashboard, LogOut, Mountain, Package, Settings, ShoppingCart, UserCog, Users } from "lucide-react";
+import { BookOpenCheck, Boxes, Building2, Check, ChevronDown, ChevronsUpDown, Globe, IndianRupee, LifeBuoy, Factory, ReceiptText, LayoutDashboard, LogOut, Mountain, Package, Settings, ShoppingCart, UserCog, Users } from "lucide-react";
 import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useStone, type StoneMode } from "@/lib/stone/store";
 import { level, roleLabel, type AreaKey, type Level, type Me, type Perms } from "@/lib/stone/perm";
 import { hasBlocks, modulesOf } from "@/lib/stone/modules";
 import type { Firm, Modules, PartyKind, StoneDB } from "@/lib/stone/types";
-import { firmsOf, kindLabel, scope, tagNew } from "@/lib/stone/firms";
+import { kindLabel, orderedFirms, scope, tagNew } from "@/lib/stone/firms";
 import Overview from "./Overview";
 import Inventory from "./Inventory";
 import Unit from "./Unit";
@@ -23,8 +23,9 @@ import Scan from "./Scan";
 import Auth from "./Auth";
 import Help from "./Help";
 import Services from "./Services";
+import Pricing from "@/components/Pricing";
 
-export type View = "overview" | "inventory" | "unit" | "stores" | "purchases" | "sales" | "parties" | "tally" | "team" | "settings" | "services" | "help" | "scan";
+export type View = "overview" | "inventory" | "unit" | "stores" | "purchases" | "sales" | "parties" | "tally" | "team" | "settings" | "services" | "pricing" | "help" | "scan";
 
 /** Sections that were merged into others; old links still land in the right place. */
 const MOVED: Record<string, [View, string]> = { mines: ["inventory", "blocks"], depot: ["inventory", "slabs"], trade: ["purchases", "import"], trace: ["inventory", "blocks"] };
@@ -83,6 +84,7 @@ export function navFor(mods: Modules, can: (a: AreaKey) => Level, perms: Perms):
     { key: "team", label: "Team", icon: UserCog, show: perms.team },
     { key: "settings", label: "Settings", icon: Settings, show: v("settings") },
     { key: "services", label: "Website and services", icon: Globe, show: perms.team || can("settings") === "edit" },
+    { key: "pricing", label: "Plans and pricing", icon: IndianRupee, show: perms.team || can("settings") === "edit" },
     { key: "help", label: "How to use", icon: LifeBuoy, show: true },
   ];
 }
@@ -122,7 +124,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
   const firmKey = `k360-firm-${me?.orgId ?? mode}`;
   const [firmId, setFirmId] = useState<string | null>(null);
   useEffect(() => { try { setFirmId(localStorage.getItem(firmKey) || null); } catch {} }, [firmKey]);
-  const firms = firmsOf(db?.settings);
+  const firms = orderedFirms(db?.settings);
   const firm = firms.length > 1 ? firms.find((f) => f.id === firmId) ?? null : null;
   const setFirm = (id: string | null) => { setFirmId(id); try { if (id) localStorage.setItem(firmKey, id); else localStorage.removeItem(firmKey); } catch {} };
   const vdb = useMemo(() => (db ? scope(db, firm?.id ?? null) : db), [db, firm?.id]);
@@ -254,6 +256,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
         {shown === "settings" && <SettingsView ctx={ctx} />}
         {shown === "help" && <Help ctx={ctx} />}
         {shown === "services" && <Services ctx={ctx} />}
+        {shown === "pricing" && <Pricing prefill={{ name: me?.name, company: db.settings.company, phone: db.settings.phone }} />}
         {shown === "scan" && <Scan ctx={ctx} blockId={sub} />}
       </main>
 
