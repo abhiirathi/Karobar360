@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { ArrowRightLeft, Camera, Trash2 } from "lucide-react";
 import { baseCost, cbm, mineMonth, months, n2, purchaseValue, rs, today, uid, weightGap } from "@/lib/stone/calc";
 import { emptyBlock } from "@/lib/stone/seed";
+import { ownMines, qualities } from "@/lib/stone/costing";
 import type { Block, BlockStatus, StoneDB } from "@/lib/stone/types";
 import { Area, Drawer, F, Grid, Note, NumIn, Section, Sel, TextIn, readPhoto } from "./ui";
 import { fileSrc } from "./files";
@@ -36,6 +37,7 @@ export default function BlockForm({ db, initial, mode, onSave, onDelete, onClose
   onClose: () => void;
 }) {
   const S = db.settings;
+  const mines = ownMines(db);
   const lastMineRate = useMemo(() => {
     const ms = months(db).reverse();
     for (const m of ms) {
@@ -56,7 +58,7 @@ export default function BlockForm({ db, initial, mode, onSave, onDelete, onClose
       e.receivedOn = today();
     } else if (mode === "own") {
       e.source = "own_mine";
-      e.mine = S.ownMines[0] ?? "";
+      e.mine = mines[0] ?? "";
       e.status = "at_mine";
       e.rate = lastMineRate;
     } else {
@@ -78,7 +80,7 @@ export default function BlockForm({ db, initial, mode, onSave, onDelete, onClose
 
   const save = () => {
     if (!b.no.trim()) return setErr("Enter the block number painted on the block.");
-    if (!b.variety.trim()) return setErr("Pick or type the stone variety.");
+    if (!b.variety.trim()) return setErr("Pick or type the stone quality.");
     if (dup) return setErr(`Block ${b.no} is already in your register.`);
     const out = { ...b, id: b.id || uid() };
     if (!out.receivedOn && (out.status === "in_yard" || out.status === "on_saw")) out.receivedOn = today();
@@ -109,15 +111,15 @@ export default function BlockForm({ db, initial, mode, onSave, onDelete, onClose
       <Section title="Block">
         <Grid cols={3}>
           <F label="Block no. *" err={dup ? "Already in register" : undefined}><TextIn value={b.no} onChange={(v) => set("no", v)} upper placeholder="e.g. MW-233" /></F>
-          <F label="Variety *" span={2}>
+          <F label="Quality *" span={2}>
             <TextIn value={b.variety} onChange={(v) => set("variety", v)} list="stone-varieties" placeholder="Makrana Albeta" />
-            <datalist id="stone-varieties">{[...new Set([...VARIETIES, ...db.blocks.map((x) => x.variety)])].map((v) => <option key={v} value={v} />)}</datalist>
+            <datalist id="stone-varieties">{[...new Set([...qualities(db), ...VARIETIES])].map((v) => <option key={v} value={v} />)}</datalist>
           </F>
           <F label="Stone"><Sel value={b.stoneType} onChange={(v) => set("stoneType", v as Block["stoneType"])} options={["marble", "granite", "sandstone", "quartzite", "onyx", "other"].map((v) => ({ v, l: v[0].toUpperCase() + v.slice(1) }))} /></F>
           <F label="Grade"><Sel value={b.grade} onChange={(v) => set("grade", v as Block["grade"])} options={["A", "B", "C", "Commercial"].map((v) => ({ v, l: v }))} /></F>
           <F label="Source"><Sel value={b.source} onChange={(v) => set("source", v as Block["source"])} options={[{ v: "own_mine", l: "Own quarry" }, { v: "purchase", l: "Bought from mine owner" }, { v: "import", l: "Imported" }]} /></F>
           <F label="Quarry / mine" span={2}>
-            {isOwn ? <Sel value={b.mine} onChange={(v) => set("mine", v)} options={S.ownMines.map((m) => ({ v: m, l: m }))} /> : <TextIn value={b.mine} onChange={(v) => set("mine", v)} placeholder="e.g. Ulodi quarry, Makrana" />}
+            {isOwn ? <Sel value={b.mine} onChange={(v) => set("mine", v)} options={mines.map((m) => ({ v: m, l: m }))} /> : <TextIn value={b.mine} onChange={(v) => set("mine", v)} placeholder="e.g. Ulodi quarry, Makrana" />}
           </F>
           <F label="Lease / quarry licence no."><TextIn value={b.leaseNo} onChange={(v) => set("leaseNo", v)} upper placeholder="ML 41/2009" /></F>
         </Grid>

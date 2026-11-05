@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, Search, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, Search, X } from "lucide-react";
 
 export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "warn" | "neg" | "good" }) {
   const t = tone === "neg" ? "text-neg" : tone === "warn" ? "text-warn" : tone === "good" ? "text-accent" : "text-ink-3";
@@ -101,9 +101,20 @@ export function Table<T extends { id: string }>({ rows, cols, empty, onRow, sear
   );
 }
 
-export function Drawer({ open, title, sub, onClose, children, footer, wide }: { open: boolean; title: string; sub?: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
+/** Rewrites the ?t= part of the address without navigating, e.g. to drop a shortcut's ":new". */
+export function setUrlTab(t: string) {
+  const u = new URL(window.location.href);
+  if (t) u.searchParams.set("t", t); else u.searchParams.delete("t");
+  window.history.replaceState(null, "", u);
+}
+
+/** `page` shows the form in the main area instead of over it, so the sidebar stays in view. */
+export function Drawer({ open, title, sub, onClose, children, footer, wide, page }: { open: boolean; title: string; sub?: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean; page?: boolean }) {
   useEffect(() => {
-    if (!open) return;
+    if (open && page) window.scrollTo({ top: 0 });
+  }, [open, page]);
+  useEffect(() => {
+    if (!open || page) return;
     const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", k);
     document.body.style.overflow = "hidden";
@@ -111,8 +122,21 @@ export function Drawer({ open, title, sub, onClose, children, footer, wide }: { 
       window.removeEventListener("keydown", k);
       document.body.style.overflow = "";
     };
-  }, [open, onClose]);
+  }, [open, onClose, page]);
   if (!open) return null;
+  if (page) return (
+    <section aria-label={title} className="enter">
+      <div className="mb-5 flex items-start gap-3">
+        <button onClick={onClose} className="btn btn-quiet btn-sm mt-0.5 !px-2" aria-label="Back"><ArrowLeft size={16} /></button>
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+          {sub && <p className="mt-0.5 text-sm text-ink-2">{sub}</p>}
+        </div>
+      </div>
+      <div className={wide ? "max-w-5xl" : "max-w-3xl"}>{children}</div>
+      {footer && <div className="sticky bottom-0 z-10 mt-6 flex flex-wrap items-center gap-2 border-t border-surface-2 bg-ground py-3">{footer}</div>}
+    </section>
+  );
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={title}>
       <button className="fade-in absolute inset-0 bg-black/35" aria-label="Close" onClick={onClose} />
@@ -131,14 +155,16 @@ export function Drawer({ open, title, sub, onClose, children, footer, wide }: { 
   );
 }
 
-export function F({ label, hint, children, span = 1, err }: { label: string; hint?: ReactNode; children: ReactNode; span?: 1 | 2 | 3; err?: string }) {
+/** A labelled field. `box` renders a plain box instead of a label, for pickers that are buttons themselves. */
+export function F({ label, hint, children, span = 1, err, box }: { label: string; hint?: ReactNode; children: ReactNode; span?: 1 | 2 | 3; err?: string; box?: boolean }) {
   const s = span === 3 ? "sm:col-span-3" : span === 2 ? "sm:col-span-2" : "";
+  const Tag = box ? "div" : "label";
   return (
-    <label className={`block ${s}`}>
+    <Tag className={`block ${s}`}>
       <span className="mb-1 block text-[0.82rem] font-medium text-ink-2">{label}</span>
       {children}
       {err ? <span className="mt-1 block text-[0.78rem] text-neg">{err}</span> : hint ? <span className="mt-1 block text-[0.78rem] text-ink-3">{hint}</span> : null}
-    </label>
+    </Tag>
   );
 }
 
@@ -187,7 +213,7 @@ export function Sel({ value, onChange, options, placeholder }: { value: string; 
 }
 
 /** Searchable picker for long lists (lots, blocks). Type to filter, arrow keys and Enter to choose. */
-export function Pick({ onPick, options, placeholder, empty = "Nothing matches" }: { onPick: (v: string) => void; options: { v: string; l: string; sub?: string; find?: string }[]; placeholder: string; empty?: string }) {
+export function Pick({ onPick, options, placeholder, empty = "Nothing matches", align = "right" }: { onPick: (v: string) => void; options: { v: string; l: string; sub?: string; find?: string }[]; placeholder: string; empty?: string; align?: "left" | "right" }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [hi, setHi] = useState(0);
@@ -209,7 +235,7 @@ export function Pick({ onPick, options, placeholder, empty = "Nothing matches" }
         <span className="truncate text-ink-2">{placeholder}</span><ChevronDown size={15} className="shrink-0 text-ink-3" />
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-1 w-[min(92vw,440px)] overflow-hidden rounded-2xl border border-surface-2 bg-ground shadow-xl">
+        <div className={`absolute ${align === "left" ? "left-0" : "right-0"} z-50 mt-1 w-[min(92vw,440px)] overflow-hidden rounded-2xl border border-surface-2 bg-ground shadow-xl`}>
           <label className="flex items-center gap-2 border-b border-surface-2 px-3 py-2.5">
             <Search size={15} className="text-ink-3" />
             <input autoFocus value={q} onChange={(e) => { setQ(e.target.value); setHi(0); }} placeholder="Search lot, block, variety…" className="w-full bg-transparent text-[0.92rem] outline-none placeholder:text-ink-3"

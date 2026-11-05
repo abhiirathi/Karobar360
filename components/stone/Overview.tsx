@@ -1,8 +1,9 @@
 "use client";
 import { useMemo, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowRight, ArrowUp, ChevronRight, SlidersHorizontal } from "lucide-react";
-import { blockCost, cbm, checkGstin, daysSince, freeDaysLeft, lakh, lotRate, mineWindow, mipCheck, n0, n2, purchaseValue, rs, rs2, saleCost, saleTaxable, saleTotals, weightGap } from "@/lib/stone/calc";
+import { blockCost, cbm, checkGstin, daysSince, freeDaysLeft, lakh, mineWindow, mipCheck, n0, n2, purchaseValue, rs, rs2, saleCost, saleTaxable, saleTotals, weightGap } from "@/lib/stone/calc";
 import { DASH_WIDGETS, hasBlocks, tallyOf } from "@/lib/stone/modules";
+import { lotCost, lotUnit, storesAlloc } from "@/lib/stone/costing";
 import { onHand, storesOf } from "@/lib/stone/stores";
 import { slabCount } from "@/lib/stone/slabs";
 import { firmOf, kindLabel } from "@/lib/stone/firms";
@@ -34,11 +35,12 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
   const party = (id: string) => db.parties.find((p) => p.id === id);
 
   const blockVal = [...transit, ...yard, ...onSaw].reduce((a, x) => a + blockCost(x), 0);
-  const slabVal = db.lots.reduce((a, l) => a + l.available * lotRate(l), 0);
+  const unit = (l: (typeof db.lots)[number]) => lotUnit(ctx.root, l);
+  const slabVal = db.lots.reduce((a, l) => a + l.available * unit(l), 0);
   const mm = mineWindow(db, 30);
   const recv = db.sales.filter((s) => !s.paid).reduce((a, s) => a + saleTotals(s, S.state, party(s.customerId)?.state ?? S.state).total, 0);
   const recent = db.lots.filter((l) => daysSince(l.createdAt) <= 60 && l.blockId);
-  const avgCost = recent.reduce((a, l) => a + l.cost, 0) / Math.max(1, recent.reduce((a, l) => a + l.sqft, 0));
+  const avgCost = recent.reduce((a, l) => a + lotCost(ctx.root, l), 0) / Math.max(1, recent.reduce((a, l) => a + l.sqft, 0));
 
   const alerts = useMemo(() => {
     const out: Alert[] = [];
@@ -48,7 +50,7 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
       }
       const g = weightGap(x);
       if (g > 0.02 && x.status !== "rejected") {
-        out.push({ tone: "warn", text: <><b>{x.no}</b> weighed {n2(x.tonnes)} t against {n2(x.billedTonnes)} t billed ({(g * 100).toFixed(1)}% short). Debit note to {party(x.supplierId)?.company ?? "supplier"}{ctx.costs ? `: about ${rs((x.billedTonnes - x.tonnes) * x.rate)}` : ""}.</>, go: ["mines", "bought"] });
+        out.push({ tone: "warn", text: <><b>{x.no}</b> weighed {n2(x.tonnes)} t against {n2(x.billedTonnes)} t billed ({(g * 100).toFixed(1)}% short). Debit note to {party(x.supplierId)?.company ?? "supplier"}{ctx.costs ? `: about ${rs((x.billedTonnes - x.tonnes) * x.rate)}` : ""}.</>, go: ["purchases", "domestic"] });
       }
       if (x.status === "in_yard" && x.receivedOn && daysSince(x.receivedOn) > 45) {
         out.push({ tone: "warn", text: <><b>{x.no}</b> ({x.variety}) has waited {daysSince(x.receivedOn)} days in the yard.{ctx.costs ? ` ${lakh(blockCost(x))} is tied up in it.` : ""}</>, go: ["unit", "yard"] });
@@ -56,19 +58,19 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
     }
     for (const s of db.shipments) {
       const f = freeDaysLeft(s);
-      if (f !== null && f <= 5) out.push({ tone: f <= 2 ? "neg" : "warn", text: <>{s.variety} from {s.country} ({s.containers.length} containers, BL {s.blNo}): {f < 0 ? `${-f} days into demurrage` : `${f} free days left at ${s.pod.split(",")[0]}`}. Push the CHA to clear.</>, go: ["trade", "import"] });
+      if (f !== null && f <= 5) out.push({ tone: f <= 2 ? "neg" : "warn", text: <>{s.variety} from {s.country} ({s.containers.length} containers, BL {s.blNo}): {f < 0 ? `${-f} days into demurrage` : `${f} free days left at ${s.pod.split(",")[0]}`}. Push the CHA to clear.</>, go: ["purchases", "import"] });
       const m = mipCheck(s);
-      if (m && !m.ok) out.push({ tone: "neg", text: <>BL {s.blNo} declares ${n0(m.value)} per {m.unit.split("/")[1]}, below the {m.floor} {m.unit} floor for marble. Customs can hold it.</>, go: ["trade", "import"] });
+      if (m && !m.ok) out.push({ tone: "neg", text: <>BL {s.blNo} declares ${n0(m.value)} per {m.unit.split("/")[1]}, below the {m.floor} {m.unit} floor for marble. Customs can hold it.</>, go: ["purchases", "import"] });
     }
     for (const s of db.sales) {
       const p = party(s.customerId);
       if (!s.paid && p && daysSince(s.date) > p.creditDays) out.push({ tone: "warn", text: <>{p.company}: invoice {s.invoiceNo} is {daysSince(s.date) - p.creditDays} days past its {p.creditDays}-day credit. {rs(saleTotals(s, S.state, p.state).total)} due.</>, go: ["sales"] });
       for (const l of s.lines) {
         const lot = db.lots.find((x) => x.id === l.lotId);
-        if (lot && l.rate < lotRate(lot)) out.push({ tone: "warn", text: <>Invoice {s.invoiceNo} sold {lot.variety} at {rs(l.rate)}/sq ft, below its cost of {rs2(lotRate(lot))}.</>, go: ["sales"] });
+        if (lot && l.rate < unit(lot)) out.push({ tone: "warn", text: <>Invoice {s.invoiceNo} sold {lot.variety} at {rs(l.rate)}/sq ft, below its cost of {rs2(unit(lot))}.</>, go: ["sales"] });
       }
     }
-    for (const l of db.lots) if (l.available > 0 && daysSince(l.createdAt) > 90) out.push({ tone: "warn", text: <>Lot {l.lotNo} ({l.variety}, {n0(l.available)} sq ft) is {daysSince(l.createdAt)} days old. Offer it to dealers before it chips in the rack.</>, go: ["depot", "stock"] });
+    for (const l of db.lots) if (l.available > 0 && daysSince(l.createdAt) > 90) out.push({ tone: "warn", text: <>Lot {l.lotNo} ({l.variety}, {n0(l.available)} sq ft) is {daysSince(l.createdAt)} days old. Offer it to dealers before it chips in the rack.</>, go: ["inventory", "slabs"] });
     const st = storesOf(db);
     const lowItems = st.items.filter((i) => i.minQty > 0 && onHand(st, i.id) <= i.minQty);
     if (lowItems.length) out.push({ tone: "warn", text: <>{lowItems.length === 1 ? <><b>{lowItems[0].name}</b> is</> : <><b>{lowItems.length} store items</b> are</>} at or below the reorder level{lowItems.length > 1 ? `: ${lowItems.slice(0, 3).map((x) => x.name).join(", ")}` : ""}.</>, go: ["stores"] });
@@ -91,7 +93,7 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
   const s30 = win(30, 0), sPrev = win(30, 30);
   const sales30 = s30.reduce((a, s) => a + saleTaxable(s), 0);
   const salesPrev = sPrev.reduce((a, s) => a + saleTaxable(s), 0);
-  const margin30 = sales30 ? (sales30 - s30.reduce((a, s) => a + s.freight + saleCost(s, db.lots, db.blocks), 0)) / (sales30 - s30.reduce((a, s) => a + s.freight, 0) || 1) : 0;
+  const margin30 = sales30 ? (sales30 - s30.reduce((a, s) => a + s.freight + saleCost(s, db.lots, db.blocks, unit), 0)) / (sales30 - s30.reduce((a, s) => a + s.freight, 0) || 1) : 0;
   const mPrev = mineWindow(db, 30, 30);
   const ch = (a: number, p: number) => { const d = p ? (a - p) / p : undefined; return d !== undefined && Math.abs(d) <= 2 ? d : undefined; };
 
@@ -133,19 +135,19 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
     hasBlocks(M) && { name: "Royalty papers in order", value: share(active.filter((x) => x.eRawanna).length, active.length) },
     { name: "Invoices within credit days", value: share(open.filter((s) => daysSince(s.date) <= (party(s.customerId)?.creditDays ?? 30)).length, open.length) },
     hasBlocks(M) && { name: "Yard blocks under 45 days", value: share(yard.filter((x) => !x.receivedOn || daysSince(x.receivedOn) <= 45).length, yard.length) },
-    { name: "Sold above cost", value: share(lines.filter((l) => { const lot = db.lots.find((x) => x.id === l.lotId); return !lot || l.rate >= lotRate(lot); }).length, lines.length) },
+    { name: "Sold above cost", value: share(lines.filter((l) => { const lot = db.lots.find((x) => x.id === l.lotId); return !lot || l.rate >= unit(lot); }).length, lines.length) },
     (M.trading || M.depot) && { name: "Slab lots under 90 days old", value: share(db.lots.filter((l) => l.available > 0 && daysSince(l.createdAt) <= 90).length, db.lots.filter((l) => l.available > 0).length) },
     M.imports && { name: "Containers clear of demurrage", value: share(port.filter((s) => (freeDaysLeft(s) ?? 99) > 5).length, port.length) },
   ].filter(Boolean) as { name: string; value: number }[];
   const score = Math.round((parts.reduce((a, p) => a + p.value, 0) / Math.max(1, parts.length)) * 100);
 
   const flow = ([
-    M.quarry && see("quarry") && { label: "At quarry", main: `${atMine.length}`, sub: `${n0(sum(atMine))} t`, go: ["mines", "quarry"] },
-    hasBlocks(M) && see("blocks") && { label: "On the road", main: `${transit.length}`, sub: `${n0(sum(transit))} t`, go: [M.processing ? "unit" : "mines", M.processing ? "yard" : "bought"] },
-    hasBlocks(M) && (see("blocks") || see("processing")) && { label: "Block yard", main: `${yard.length}`, sub: `${n0(sum(yard))} t · ${n2(yard.reduce((a, x) => a + cbm(x), 0))} CBM`, go: M.processing ? ["unit", "yard"] : ["mines", M.quarry && !M.buyBlocks ? "quarry" : "bought"] },
+    M.quarry && see("quarry") && { label: "At quarry", main: `${atMine.length}`, sub: `${n0(sum(atMine))} t`, go: ["inventory", "blocks"] },
+    hasBlocks(M) && see("blocks") && { label: "On the road", main: `${transit.length}`, sub: `${n0(sum(transit))} t`, go: M.processing ? ["unit", "yard"] : ["purchases", "domestic"] },
+    hasBlocks(M) && (see("blocks") || see("processing")) && { label: "Block yard", main: `${yard.length}`, sub: `${n0(sum(yard))} t · ${n2(yard.reduce((a, x) => a + cbm(x), 0))} CBM`, go: ["inventory", "blocks"] },
     M.processing && see("processing") && { label: "On saw", main: `${onSaw.length}`, sub: `${n0(sum(onSaw))} t`, go: ["unit", "yard"] },
-    M.processing && see("processing") && { label: "Slabs at unit", main: n0(unitLots.reduce((a, l) => a + slabCount(l), 0)), sub: `${n0(unitLots.reduce((a, l) => a + l.available, 0))} sq ft`, go: ["unit", "slabs"] },
-    (M.depot || M.trading) && see("stock") && { label: "Depot", main: n0(depotLots.reduce((a, l) => a + l.available, 0)), sub: "sq ft", go: ["depot", "stock"] },
+    M.processing && see("processing") && { label: "Slabs at unit", main: n0(unitLots.reduce((a, l) => a + slabCount(l), 0)), sub: `${n0(unitLots.reduce((a, l) => a + l.available, 0))} sq ft`, go: ["inventory", "slabs"] },
+    (M.depot || M.trading) && see("stock") && { label: "Depot", main: n0(depotLots.reduce((a, l) => a + l.available, 0)), sub: "sq ft", go: ["inventory", "slabs"] },
     see("sales") && { label: "Sold, 30 days", main: M.depot || M.trading || M.processing ? n0(soldMonth) : `${db.sales.filter((s) => daysSince(s.date) <= 30).length}`, sub: M.depot || M.trading || M.processing ? "sq ft" : "invoices", go: ["sales"] },
   ].filter(Boolean)) as { label: string; main: string; sub: string; go: [View, string?] }[];
 
@@ -156,18 +158,18 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
   const summary = [
     hasBlocks(M) && see("blocks") && `${yard.length} block${yard.length === 1 ? "" : "s"} in the yard${M.processing && see("processing") ? `, ${onSaw.length} on the saws` : ""}`,
     (M.depot || M.trading) && see("stock") && `${n0(stockSqft)} sq ft of slab in stock`,
-    M.imports && see("trade") && `${sailing} import${sailing === 1 ? "" : "s"} on the way`,
+    M.imports && see("blocks") && `${sailing} import${sailing === 1 ? "" : "s"} on the way`,
     see("sales") && `${lakh(recv)} due from customers`,
   ].filter(Boolean).join(", ");
   const T = tallyOf(db);
 
   const shortcuts = ([
-    M.buyBlocks && ctx.edit("blocks") && ["Register a block", "mines", "bought"],
-    M.quarry && ctx.edit("quarry") && ["Log quarry cost", "mines", "costs"],
+    ctx.edit("sales") && ["New sale", "sales", "new"],
+    (M.buyBlocks || M.processing || M.imports) && ctx.edit("blocks") && ["New purchase", "purchases", "domestic:new"],
+    M.imports && ctx.edit("blocks") && ["New import purchase", "purchases", "import:new"],
+    M.trading && ctx.edit("stock") && ["Slabs bought", "purchases", "slabs:new"],
+    M.quarry && ctx.edit("quarry") && ["Log extraction cost", "inventory", "costs"],
     M.processing && ctx.edit("blocks") && ["Receive at unit", "unit", "yard"],
-    M.trading && ctx.edit("stock") && ["Slabs bought", "depot", "stock"],
-    ctx.edit("sales") && ["New invoice", "sales", ""],
-    M.imports && ctx.edit("trade") && ["Upload a BL", "trade", "import"],
     M.stores && ctx.edit("stores") && ["Issue from store", "stores", ""],
   ].filter(Boolean)) as [string, View, string][];
 
@@ -254,6 +256,12 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
         {myAlerts.length > 6 && <p className="mt-2 text-xs text-ink-3">{myAlerts.length - 6} more in the sections.</p>}
       </Panel>
     ),
+    trade: (M.imports || M.exports || db.parties.some((p) => p.intl)) && (see("blocks") || see("sales")) ? (
+      <Panel className="enter">
+        <h3 className="font-medium">Imports and exports</h3>
+        <TradeReport ctx={ctx} />
+      </Panel>
+    ) : null,
     costbuild: C && M.processing && db.jobs.length ? (
       <Panel className="enter">
         <h3 className="font-medium">Where a sq ft of slab gets its cost</h3>
@@ -301,6 +309,36 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
       {ctx.firms.length > 1 && !ctx.firm && <FirmTable ctx={ctx} />}
       {rows.slice(1)}
       {custom && <Customise ctx={ctx} available={Object.keys(W_).filter((k) => W_[k] !== null)} kpis={kpiAll.filter((k) => k.ok)} onClose={() => setCustom(false)} />}
+    </div>
+  );
+}
+
+/** Imports and exports at a glance: import purchases, shipments still on the way, and export invoices. */
+function TradeReport({ ctx }: { ctx: Ctx }) {
+  const { db } = ctx;
+  const C = ctx.costs;
+  const party = (id: string) => ctx.root.parties.find((p) => p.id === id);
+  const fyStart = `${new Date().getMonth() >= 3 ? new Date().getFullYear() : new Date().getFullYear() - 1}-04-01`;
+  const imp = db.blocks.filter((b) => b.source === "import");
+  const impFy = imp.filter((b) => b.date >= fyStart);
+  const impBills = new Set(impFy.map((b) => b.purchaseId || b.id)).size;
+  const notIn = imp.filter((b) => b.status === "in_transit");
+  const ships = db.shipments.filter((s) => s.dir === "import" && s.status !== "received");
+  const port = ships.filter((s) => freeDaysLeft(s) !== null);
+  const exp = db.sales.filter((s) => party(s.customerId)?.intl);
+  const expFy = exp.filter((s) => s.date >= fyStart);
+  const expShips = db.shipments.filter((s) => s.dir === "export" && s.status !== "received");
+  const tile = (l: string, v: string, sub: string, go?: [View, string?]) => (
+    <button onClick={go ? () => ctx.go(...go) : undefined} className="focusable rounded-2xl bg-surface-2/60 px-4 py-3 text-left">
+      <div className="text-[0.8rem] text-ink-3">{l}</div><div className="num mt-1 text-[1.3rem] font-semibold leading-tight">{v}</div><div className="mt-0.5 text-[0.8rem] text-ink-2">{sub}</div>
+    </button>
+  );
+  return (
+    <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {tile("Imported this year", C ? lakh(impFy.reduce((a, b) => a + blockCost(b), 0)) : `${impFy.length} blocks`, `${impBills} bill${impBills === 1 ? "" : "s"} · ${n0(impFy.reduce((a, b) => a + (b.tonnes || b.billedTonnes), 0))} t`, ["purchases", "import"])}
+      {tile("Imports not yet received", `${notIn.length + ships.length}`, `${notIn.length} blocks on the road · ${ships.length} shipment${ships.length === 1 ? "" : "s"} on the way`, ["purchases", "import"])}
+      {tile("At port", port.length ? `${port.reduce((a, s) => Math.min(a, freeDaysLeft(s)!), 99)} free days` : "—", port.length ? `${port.length} shipment${port.length > 1 ? "s" : ""} waiting to clear` : "Nothing waiting at port")}
+      {tile("Exported this year", lakh(expFy.reduce((a, s) => a + saleTaxable(s), 0)), `${expFy.length} export invoices · ${expShips.length} shipment${expShips.length === 1 ? "" : "s"} sailing`, ["sales", "export"])}
     </div>
   );
 }
@@ -386,11 +424,12 @@ function Customise({ ctx, available, kpis, onClose }: { ctx: Ctx; available: str
 function CostBuild({ ctx }: { ctx: Ctx }) {
   const { db } = ctx;
   const rows = useMemo(() => {
-    const m: Record<string, { sqft: number; stone: number; royalty: number; freight: number; damage: number; proc: number }> = {};
+    const m: Record<string, { sqft: number; stone: number; royalty: number; freight: number; damage: number; proc: number; stores: number }> = {};
+    const st = storesAlloc(ctx.root).rate;
     for (const j of db.jobs) {
       const b = db.blocks.find((x) => x.id === j.blockId);
       if (!b) continue;
-      const r = (m[b.variety] ??= { sqft: 0, stone: 0, royalty: 0, freight: 0, damage: 0, proc: 0 });
+      const r = (m[b.variety] ??= { sqft: 0, stone: 0, royalty: 0, freight: 0, damage: 0, proc: 0, stores: 0 });
       const good = Math.max(1, j.sqft - j.rejectSqft);
       r.sqft += good;
       r.stone += (b.source === "import" ? b.importCost : b.rate * (b.rateBasis === "cbm" ? cbm(b) : b.billedTonnes || b.tonnes));
@@ -398,15 +437,17 @@ function CostBuild({ ctx }: { ctx: Ctx }) {
       r.freight += b.freight + b.loading + b.otherCost;
       r.damage += b.damageAlloc;
       r.proc += j.power + j.blades + j.resin + j.netting + j.polishing + j.labour + j.other;
+      r.stores += (st[j.finishedOn.slice(0, 7)] ?? 0) * good;
     }
-    return Object.entries(m).map(([v, r]) => ({ v, ...r, total: (r.stone + r.royalty + r.freight + r.damage + r.proc) / r.sqft })).sort((a, b) => b.sqft - a.sqft);
-  }, [db]);
+    return Object.entries(m).map(([v, r]) => ({ v, ...r, total: (r.stone + r.royalty + r.freight + r.damage + r.proc + r.stores) / r.sqft })).sort((a, b) => b.sqft - a.sqft);
+  }, [db, ctx.root]);
   const parts = [
     { k: "stone", l: "Stone", c: "var(--ink)" },
     { k: "royalty", l: "Royalty", c: "var(--warn)" },
     { k: "freight", l: "Freight", c: "var(--data-2)" },
     { k: "damage", l: "Damage", c: "var(--neg)" },
     { k: "proc", l: "Sawing & polish", c: "var(--accent)" },
+    { k: "stores", l: "Stores", c: "var(--data-3)" },
   ] as const;
   return (
     <div className="mt-3">

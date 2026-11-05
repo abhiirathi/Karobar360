@@ -86,11 +86,17 @@ export function seed(): StoneDB {
   });
 
   const parties: Party[] = [
-    party("s1", "supplier", "Makrana Marble Udyog", "Ramesh Kumawat", { gstin: gst("08", "AAHFM2290P"), pan: "AAHFM2290P", city: "Makrana, Nagaur", billing: "Station Road", pincode: "341505", creditDays: 15 }),
-    party("s2", "supplier", "Agariya Stone Supply", "Bhanwar Lal Gurjar", { gstin: gst("08", "ABQPG7713D"), pan: "ABQPG7713D", city: "Agariya, Rajsamand", billing: "Mine area, Agariya", pincode: "313324", creditDays: 7 }),
-    party("s3", "supplier", "Rishabh Green Minerals", "Mahesh Jain", { gstin: gst("08", "AAFFR5106H"), pan: "AAFFR5106H", city: "Rishabhdev, Udaipur", billing: "NH-48, Kesariyaji", pincode: "313802", creditDays: 30 }),
-    party("s4", "supplier", "Jalore Granite Quarries", "Sohan Singh Deora", { gstin: gst("08", "AAGFJ3348M"), pan: "AAGFJ3348M", city: "Jalore", billing: "Granite area, Bhinmal Road", pincode: "343001", creditDays: 15 }),
-    party("s5", "supplier", "Kishangarh Stone Chemicals", "Naveen Agarwal", { gstin: gst("08", "AAPFK6604Q"), pan: "AAPFK6604Q", city: "Kishangarh, Ajmer", billing: "Marble Mandi Road", pincode: "305801", creditDays: 30 }),
+    party("s1", "supplier", "Makrana Marble Udyog", "Ramesh Kumawat", { gstin: gst("08", "AAHFM2290P"), pan: "AAHFM2290P", city: "Makrana, Nagaur", billing: "Station Road", pincode: "341505", creditDays: 15, mines: ["Ulodi quarry, Makrana", "Dungri quarry, Makrana"] }),
+    party("s2", "supplier", "Agariya Stone Supply", "Bhanwar Lal Gurjar", { gstin: gst("08", "ABQPG7713D"), pan: "ABQPG7713D", city: "Agariya, Rajsamand", billing: "Mine area, Agariya", pincode: "313324", creditDays: 7, mines: ["Agariya"] }),
+    party("s3", "supplier", "Rishabh Green Minerals", "Mahesh Jain", { gstin: gst("08", "AAFFR5106H"), pan: "AAFFR5106H", city: "Rishabhdev, Udaipur", billing: "NH-48, Kesariyaji", pincode: "313802", creditDays: 30, mines: ["Kesariyaji"] }),
+    party("s4", "supplier", "Jalore Granite Quarries", "Sohan Singh Deora", { gstin: gst("08", "AAGFJ3348M"), pan: "AAGFJ3348M", city: "Jalore", billing: "Granite area, Bhinmal Road", pincode: "343001", creditDays: 15, mines: ["Bhinmal Road"] }),
+    party("s6", "supplier", "Anatolia Natural Stone Ltd.", "Mehmet Yilmaz", { intl: true, country: "Turkey", state: "96", city: "Burdur", billing: "Organize Sanayi Bölgesi", creditDays: 0 }),
+    party("v1", "vendor", "Morwad Diesel Point", "Pradeep Paliwal", { gstin: gst("08", "AAPFM5521D"), pan: "AAPFM5521D", city: "Morwad, Rajsamand", billing: "Nathdwara Road", pincode: "313324", creditDays: 15, notes: "Diesel for the excavator, loader and DG set" }),
+    party("v2", "vendor", "Rajsamand Earthmovers", "Dinesh Gurjar", { gstin: gst("08", "ABBFR7730E"), pan: "ABBFR7730E", city: "Rajsamand", billing: "Kankroli bypass", pincode: "313326", creditDays: 30, notes: "Hydra crane and excavator on hire, servicing" }),
+    party("m1", "mine", "Morwad quarry, Rajsamand", "", { leaseNo: "ML 41/2009", city: "Morwad, Rajsamand" }),
+    ...([["Morwad White", "marble"], ["Makrana Albeta", "marble"], ["Agariya White", "marble"], ["Udaipur Green", "marble"], ["Jalore Rosy Pink", "granite"], ["Burdur Beige", "marble"], ["Carrara White", "marble"]] as const)
+      .map(([q, st], i) => party(`q${i + 1}`, "quality", q, "", { stoneType: st })),
+    party("s5", "vendor", "Kishangarh Stone Chemicals", "Naveen Agarwal", { gstin: gst("08", "AAPFK6604Q"), pan: "AAPFK6604Q", city: "Kishangarh, Ajmer", billing: "Marble Mandi Road", pincode: "305801", creditDays: 30 }),
     party("t1", "transporter", "Shri Balaji Roadlines", "Gopal Choudhary", { city: "Kishangarh, Ajmer", billing: "Transport Nagar", pincode: "305801" }),
     party("t2", "transporter", "Mewar Trailer Service", "Kalu Ram Meena", { city: "Rajsamand", billing: "Kankroli bypass", pincode: "313326" }),
     party("c1", "customer", "Sharma Tiles & Marble House", "Vikas Sharma", { gstin: gst("08", "ABCFS6620R"), pan: "ABCFS6620R", city: "Jaipur", billing: "Tonk Road, Sanganer", pincode: "302029", creditDays: 30, creditLimit: 1500000, contact: "Vikas Sharma" }),
@@ -129,17 +135,17 @@ export function seed(): StoneDB {
   }
 
   // Purchased blocks.
-  const albeta1 = mk({ no: "MK-A-0917", variety: "Makrana Albeta", source: "purchase", supplierId: "s1", mine: "Ulodi quarry, Makrana", date: day(-52), l: 210, w: 140, h: 125, tonnes: 9.8, billedTonnes: 10.1, rate: 32000, vehicleNo: "RJ 21 GB 7712", transporterId: "t1", freight: 6200, loading: 2400, invoiceNo: "MMU/1182", eRawanna: "ER5288731", ewayBill: "4718 2290 1132", weighSlip: "WB-7581", status: "sawn", receivedOn: day(-51) });
-  mk({ no: "MK-A-0918", variety: "Makrana Albeta", source: "purchase", supplierId: "s1", mine: "Ulodi quarry, Makrana", date: day(-52), l: 195, w: 135, h: 120, tonnes: 8.6, billedTonnes: 8.6, rate: 32000, vehicleNo: "RJ 21 GB 7712", transporterId: "t1", freight: 5400, loading: 2400, invoiceNo: "MMU/1182", eRawanna: "ER5288732", ewayBill: "4718 2290 1132", weighSlip: "WB-7581", status: "in_yard", receivedOn: day(-51) });
+  const albeta1 = mk({ no: "MK-A-0917", variety: "Makrana Albeta", source: "purchase", supplierId: "s1", mine: "Ulodi quarry, Makrana", date: day(-52), l: 210, w: 140, h: 125, tonnes: 9.8, billedTonnes: 10.1, rate: 32000, vehicleNo: "RJ 21 GB 7712", transporterId: "t1", freight: 6200, loading: 2400, invoiceNo: "MMU/1182", purchaseId: "pb1", eRawanna: "ER5288731", ewayBill: "4718 2290 1132", weighSlip: "WB-7581", status: "sawn", receivedOn: day(-51) });
+  mk({ no: "MK-A-0918", variety: "Makrana Albeta", source: "purchase", supplierId: "s1", mine: "Ulodi quarry, Makrana", date: day(-52), l: 195, w: 135, h: 120, tonnes: 8.6, billedTonnes: 8.6, rate: 32000, vehicleNo: "RJ 21 GB 7712", transporterId: "t1", freight: 5400, loading: 2400, invoiceNo: "MMU/1182", purchaseId: "pb1", eRawanna: "ER5288732", ewayBill: "4718 2290 1132", weighSlip: "WB-7581", status: "in_yard", receivedOn: day(-51) });
 
   const ag = [
-    mk({ no: "AG-3301", variety: "Agariya White", source: "purchase", supplierId: "s2", mine: "Agariya", date: day(-19), l: 260, w: 150, h: 140, tonnes: 14.7, billedTonnes: 15.4, rate: 3200, vehicleNo: "RJ 30 GA 9054", transporterId: "t2", freight: 7400, loading: 2000, invoiceNo: "ASS/774", eRawanna: "ER5341102", ewayBill: "5120 6634 0918", weighSlip: "WB-7802", status: "in_yard", receivedOn: day(-18) }),
-    mk({ no: "AG-3302", variety: "Agariya White", source: "purchase", supplierId: "s2", mine: "Agariya", date: day(-19), l: 240, w: 145, h: 130, tonnes: 12.2, billedTonnes: 12.2, rate: 3200, vehicleNo: "RJ 30 GA 9054", transporterId: "t2", freight: 6100, loading: 2000, invoiceNo: "ASS/774", eRawanna: "ER5341103", ewayBill: "5120 6634 0918", weighSlip: "WB-7802", status: "sawn", receivedOn: day(-18) }),
-    mk({ no: "AG-3303", variety: "Agariya White", source: "purchase", supplierId: "s2", mine: "Agariya", date: day(-19), l: 230, w: 140, h: 120, tonnes: 10.4, billedTonnes: 10.4, rate: 3200, vehicleNo: "RJ 30 GA 9054", transporterId: "t2", freight: 5200, loading: 2000, invoiceNo: "ASS/774", eRawanna: "ER5341104", ewayBill: "5120 6634 0918", weighSlip: "WB-7802", status: "rejected", defects: "Cracked through the middle while unloading from trolley", receivedOn: day(-18) }),
+    mk({ no: "AG-3301", variety: "Agariya White", source: "purchase", supplierId: "s2", mine: "Agariya", date: day(-19), l: 260, w: 150, h: 140, tonnes: 14.7, billedTonnes: 15.4, rate: 3200, vehicleNo: "RJ 30 GA 9054", transporterId: "t2", freight: 7400, loading: 2000, invoiceNo: "ASS/774", purchaseId: "pb2", eRawanna: "ER5341102", ewayBill: "5120 6634 0918", weighSlip: "WB-7802", status: "in_yard", receivedOn: day(-18) }),
+    mk({ no: "AG-3302", variety: "Agariya White", source: "purchase", supplierId: "s2", mine: "Agariya", date: day(-19), l: 240, w: 145, h: 130, tonnes: 12.2, billedTonnes: 12.2, rate: 3200, vehicleNo: "RJ 30 GA 9054", transporterId: "t2", freight: 6100, loading: 2000, invoiceNo: "ASS/774", purchaseId: "pb2", eRawanna: "ER5341103", ewayBill: "5120 6634 0918", weighSlip: "WB-7802", status: "sawn", receivedOn: day(-18) }),
+    mk({ no: "AG-3303", variety: "Agariya White", source: "purchase", supplierId: "s2", mine: "Agariya", date: day(-19), l: 230, w: 140, h: 120, tonnes: 10.4, billedTonnes: 10.4, rate: 3200, vehicleNo: "RJ 30 GA 9054", transporterId: "t2", freight: 5200, loading: 2000, invoiceNo: "ASS/774", purchaseId: "pb2", eRawanna: "ER5341104", ewayBill: "5120 6634 0918", weighSlip: "WB-7802", status: "rejected", defects: "Cracked through the middle while unloading from trolley", receivedOn: day(-18) }),
   ];
-  mk({ no: "UG-118", variety: "Udaipur Green", source: "purchase", supplierId: "s3", mine: "Kesariyaji", date: day(-9), l: 200, w: 130, h: 115, tonnes: 8.1, billedTonnes: 8.4, rate: 9000, vehicleNo: "RJ 27 GD 3341", transporterId: "t2", freight: 5600, loading: 1800, invoiceNo: "RGM/2207", eRawanna: "", ewayBill: "6011 2093 4471", weighSlip: "WB-7866", status: "in_yard", receivedOn: day(-8), notes: "Rawanna copy not received with the vehicle" });
-  mk({ no: "UG-119", variety: "Udaipur Green", source: "purchase", supplierId: "s3", mine: "Kesariyaji", date: day(-2), l: 210, w: 135, h: 120, tonnes: 0, billedTonnes: 9.2, rate: 9000, vehicleNo: "RJ 27 GD 3341", transporterId: "t2", freight: 5900, invoiceNo: "RGM/2231", eRawanna: "ER5350417", ewayBill: "6011 2093 5102", status: "in_transit" });
-  const jal = mk({ no: "JL-RP-552", variety: "Jalore Rosy Pink", stoneType: "granite", source: "purchase", supplierId: "s4", mine: "Bhinmal Road", date: day(-61), l: 280, w: 160, h: 150, tonnes: 18.1, billedTonnes: 18.1, rate: 3800, vehicleNo: "RJ 16 GA 6620", transporterId: "t1", freight: 14400, loading: 3000, invoiceNo: "JGQ/091", eRawanna: "ER5270036", ewayBill: "3907 1150 8806", weighSlip: "WB-7524", status: "sawn", receivedOn: day(-59) });
+  mk({ no: "UG-118", variety: "Udaipur Green", source: "purchase", supplierId: "s3", mine: "Kesariyaji", date: day(-9), l: 200, w: 130, h: 115, tonnes: 8.1, billedTonnes: 8.4, rate: 9000, vehicleNo: "RJ 27 GD 3341", transporterId: "t2", freight: 5600, loading: 1800, invoiceNo: "RGM/2207", purchaseId: "pb3", eRawanna: "", ewayBill: "6011 2093 4471", weighSlip: "WB-7866", status: "in_yard", receivedOn: day(-8), notes: "Rawanna copy not received with the vehicle" });
+  mk({ no: "UG-119", variety: "Udaipur Green", source: "purchase", supplierId: "s3", mine: "Kesariyaji", date: day(-2), l: 210, w: 135, h: 120, tonnes: 0, billedTonnes: 9.2, rate: 9000, vehicleNo: "RJ 27 GD 3341", transporterId: "t2", freight: 5900, invoiceNo: "RGM/2231", purchaseId: "pb4", eRawanna: "ER5350417", ewayBill: "6011 2093 5102", status: "in_transit" });
+  const jal = mk({ no: "JL-RP-552", variety: "Jalore Rosy Pink", stoneType: "granite", source: "purchase", supplierId: "s4", mine: "Bhinmal Road", date: day(-61), l: 280, w: 160, h: 150, tonnes: 18.1, billedTonnes: 18.1, rate: 3800, vehicleNo: "RJ 16 GA 6620", transporterId: "t1", freight: 14400, loading: 3000, invoiceNo: "JGQ/091", purchaseId: "pb5", eRawanna: "ER5270036", ewayBill: "3907 1150 8806", weighSlip: "WB-7524", status: "sawn", receivedOn: day(-59) });
 
   // Imports: Turkish beige blocks (received) — landed cost shared by CBM.
   const shipments: Shipment[] = [];
@@ -164,7 +170,8 @@ export function seed(): StoneDB {
   const trVol = trBlocks.reduce((a, b) => a + (b.l * b.w * b.h) / 1e6, 0);
   trBlocks.forEach((x, i) => {
     const b = mk({
-      no: `TR-BB-${41 + i}`, variety: "Burdur Beige", source: "import", shipmentId: tr.id, mine: "Burdur, Turkey", date: day(-24), l: x.l, w: x.w, h: x.h,
+      no: `TR-BB-${41 + i}`, variety: "Burdur Beige", source: "import", shipmentId: tr.id, supplierId: "s6", purchaseId: "pi1", invoiceNo: "ANS-2026-118", mine: "Turkey",
+      imp: { blNo: tr.blNo, blDate: tr.blDate, vessel: tr.vessel, port: "Mundra", cif: Math.round(tr.cifUsd * tr.fx), charges: [{ label: "Customs duty", amount: tr.duty, note: `BE ${tr.beNo}` }, { label: "CHA charges", amount: tr.cha, note: "" }, { label: "Port, CFS & line charges", amount: tr.port, note: "" }, { label: "Freight port to yard", amount: tr.inland, note: "Mundra to Kishangarh" }] }, date: day(-24), l: x.l, w: x.w, h: x.h,
       tonnes: x.t, billedTonnes: x.t, rate: 0, rateBasis: "cbm", importCost: Math.round((trTotal * ((x.l * x.w * x.h) / 1e6)) / trVol),
       vehicleNo: "GJ 12 BW 4410", status: i === 0 ? "sawn" : "in_yard", receivedOn: day(-24),
     });
@@ -215,19 +222,21 @@ export function seed(): StoneDB {
 
   // Mine running costs for the last three months.
   const mineCosts: MineCost[] = [];
-  const cost = (date: string, cat: MineCost["cat"], machine: string, qty: number, unit: string, rate: number, note = "") =>
-    mineCosts.push({ id: `mc${mineCosts.length + 1}`, date, mine, cat, machine, qty, unit, rate, amount: Math.round(qty * rate), note });
+  const cost = (date: string, cat: MineCost["cat"], machine: string, qty: number, unit: string, rate: number, note = "", vendorId = "") =>
+    mineCosts.push({ id: `mc${mineCosts.length + 1}`, date, mine, cat, machine, qty, unit, rate, amount: Math.round(qty * rate), note, vendorId });
   for (let wk = 0; wk < 13; wk++) {
     const d = day(-88 + wk * 7);
     const j = 0.85 + r() * 0.3;
-    cost(d, "diesel", "Excavator (PC-210)", Math.round(220 * j), "L", 94);
-    cost(d, "diesel", "Wheel loader", Math.round(90 * j), "L", 94);
-    cost(d, "diesel", "Compressor & DG set", Math.round(60 * j), "L", 94);
+    cost(d, "diesel", "Excavator (PC-210)", Math.round(220 * j), "L", 94, "", "v1");
+    cost(d, "diesel", "Wheel loader", Math.round(90 * j), "L", 94, "", "v1");
+    cost(d, "diesel", "Compressor & DG set", Math.round(60 * j), "L", 94, "", "v1");
+    cost(d, "machine", "Hydra crane", Math.round(10 * j), "hours", 1200, "", "v2");
+    cost(d, "loading", "Hydra crane", Math.round(5 * j), "trips", 1500, "Loading blocks into trucks");
     cost(d, "power", "Wire saw machines", Math.round(1150 * j), "kWh", 8.5);
     cost(d, "wire", "Diamond wire", Math.round(7 * j * 10) / 10, "m", 3200, "Plastic-coated, 11 mm beads");
     cost(d, "labour", "Quarry crew", Math.round(46 * j), "man-days", 650);
     if (wk % 2 === 0) cost(d, "tools", "Drill rods, bits, wedges", 1, "lot", Math.round(11000 * j));
-    if (wk % 4 === 1) cost(d, "maintenance", "Excavator service", 1, "job", Math.round(16000 * j));
+    if (wk % 4 === 1) cost(d, "maintenance", "Excavator service", 1, "job", Math.round(16000 * j), "", "v2");
   }
   cost(day(-60), "rent", "Dead rent (quarterly)", 1, "qtr", 42000);
   // Own-quarry blocks carry that month's extraction cost per tonne.
@@ -260,8 +269,8 @@ export function seed(): StoneDB {
     const j: SawJob = {
       id: `j${jobs.length + 1}`, blockId: b.id, machine: b.stoneType === "granite" ? "Multi-wire saw" : b.variety === "Makrana Albeta" ? "Gang saw 2" : "Gang saw 1",
       startedOn: s, finishedOn: f, thicknessMm: thick, slabs, slabL: b.l - 6, slabW: b.w - 4, sqft, rejectSqft: Math.round(sqft * 0.04),
-      hours, power: Math.round(hours * S.sawKw * 0.8 * S.powerRate), blades: Math.round(sqft * S.bladePerSqft), resin: Math.round(sqft * S.resinPerSqft),
-      netting: Math.round(sqft * S.nettingPerSqft), polishing: Math.round(sqft * S.polishPerSqft), labour: Math.round(sqft * S.labourPerSqft), other: 0,
+      // Blades, resin, netting and polishing come from Stores, spread per sq ft each month.
+      hours, power: Math.round(hours * S.sawKw * 0.8 * S.powerRate), blades: 0, resin: 0, netting: 0, polishing: 0, labour: Math.round(sqft * S.labourPerSqft), other: 0,
       finish: "Polished", grade: b.grade, lotId,
     };
     jobs.push(j);
@@ -337,12 +346,12 @@ export function seed(): StoneDB {
     ["si5", "Polishing powder (oxalic)", "polish", "kg", 25, 190, "Store room, rack 3"],
     ["si6", "Magnesite abrasives, grit 60–1500 (set)", "abrasive", "set", 6, 2250, "Polishing line"],
     ["si7", "Gang saw blades, 4.2 m", "blades", "pcs", 20, 1850, "Blade store"],
-    ["si8", "Diamond wire, 11.5 mm", "blades", "m", 40, 3150, "Quarry store"],
+    ["si8", "Diamond wire, 11.5 mm", "blades", "m", 40, 3150, "Blade store"],
     ["si9", "Stone sealer, water-based", "chemicals", "L", 10, 620, "Store room, rack 3"],
     ["si10", "Hydraulic oil 68", "fuel", "L", 50, 155, "Oil shed"],
     ["si11", "Wooden A-frame crates", "packing", "pcs", 8, 1350, "Dispatch bay"],
     ["si12", "MS strapping roll", "packing", "roll", 4, 980, "Dispatch bay"],
-  ].map(([id, name, cat, unit, minQty, rate, location]) => ({ id: id as string, name: name as string, cat: cat as StoreItem["cat"], unit: unit as string, minQty: minQty as number, rate: rate as number, location: location as string, notes: "" }));
+  ].map(([id, name, cat, unit, minQty, rate, location]) => ({ id: id as string, name: name as string, cat: cat as StoreItem["cat"], unit: unit as string, minQty: minQty as number, rate: rate as number, location: location as string, notes: "", vendorId: "s5" }));
   const moves: StoreMove[] = [];
   const buyQty: Record<string, number> = { si1: 400, si2: 200, si3: 320, si4: 900, si5: 150, si6: 38, si7: 80, si8: 160, si9: 50, si10: 260, si11: 45, si12: 24 };
   const useWk: Record<string, number> = { si1: 52, si2: 26, si3: 30, si4: 120, si5: 14, si6: 4, si7: 9, si8: 14, si9: 4, si10: 22, si11: 4, si12: 2 };
@@ -350,8 +359,8 @@ export function seed(): StoneDB {
     moves.push({ id: `sm${moves.length + 1}`, itemId: it.id, date: day(-60), kind: "in", qty: buyQty[it.id], rate: Math.round(it.rate * 0.96), supplierId: "s5", billNo: "KSC/2290", gstRate: 18, note: "" });
     if (["si1", "si2", "si4", "si7"].includes(it.id)) moves.push({ id: `sm${moves.length + 1}`, itemId: it.id, date: day(-21), kind: "in", qty: Math.round(buyQty[it.id] * 0.5), rate: it.rate, supplierId: "s5", billNo: "KSC/2417", gstRate: 18, note: "" });
     for (let w = 8; w >= 0; w--) {
-      const place = it.cat === "blades" && it.id === "si8" ? S.ownMines[0] ?? "Quarry" : it.cat === "epoxy" || it.cat === "resin" || it.cat === "netting" ? "Epoxy line" : it.cat === "abrasive" || it.cat === "polish" ? "Polishing line" : it.cat === "packing" ? "Dispatch" : it.cat === "blades" ? "Gang saw 1" : "General";
-      moves.push({ id: `sm${moves.length + 1}`, itemId: it.id, date: day(-w * 7 - 2), kind: "out", qty: Math.round(useWk[it.id] * (0.85 + r() * 0.3)), rate: 0, usedFor: place, note: "" });
+      const place = it.id === "si8" ? "Multi-wire saw" : it.cat === "epoxy" || it.cat === "resin" || it.cat === "netting" ? "Epoxy line" : it.cat === "abrasive" || it.cat === "polish" ? "Polishing line" : it.cat === "packing" ? "Dispatch" : it.cat === "blades" ? "Gang saw 1" : "General";
+      moves.push({ id: `sm${moves.length + 1}`, itemId: it.id, date: day(-w * 7 - 2), kind: "out", qty: Math.round(useWk[it.id] * (0.85 + r() * 0.3) * (place === "General" || place === "Dispatch" ? 1 : 0.25)), rate: 0, usedFor: place, note: "" });
     }
   }
 

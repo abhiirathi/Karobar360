@@ -5,7 +5,7 @@ import { DEFAULT_SETTINGS, seed } from "./seed";
 import { ALL_SECTIONS, permsOf, type Me, type Perms, type Section } from "./perm";
 import type { StoneDB } from "./types";
 
-const KEY = "karobar360.stone.v3"; // v3: slabs, firms, exports and Tally figures in the sample company
+const KEY = "karobar360.stone.v4"; // v4: masters, purchases by bill and stores cost per sq ft in the sample company
 export type StoneMode = "demo" | "cloud";
 export type Status = "loading" | "ready" | "signedout" | "error";
 

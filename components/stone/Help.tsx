@@ -1,17 +1,17 @@
 "use client";
 import { useState } from "react";
-import { ArrowRight, ChevronDown, Factory, Mountain, ReceiptText, Truck, Warehouse, Wallet } from "lucide-react";
+import { ArrowRight, ChevronDown, Factory, ReceiptText, ShoppingCart, Truck, Warehouse, Wallet } from "lucide-react";
 import type { Ctx, View } from "./StoneApp";
 
 type Guide = { key: string; view: View; sub?: string; title: string; what: string; steps: string[]; tip?: string };
 
 const JOURNEY = [
-  { icon: Mountain, title: "Block comes in", where: "Mines → own quarry, bought or imported", text: "Note the block no., size, weight, rawanna and vehicle." },
-  { icon: Truck, title: "Reaches the yard", where: "Processing unit → Block yard → Receive", text: "Weigh it at the gate. Any shortage against the bill is flagged." },
-  { icon: Factory, title: "Cut on the saw", where: "Block yard → Load on saw → Slabs out", text: "Enter how many slabs came out and give them a lot no." },
-  { icon: Warehouse, title: "Slabs in stock", where: "Slab stock, by lot or by slab", text: "Every slab carries its block no., so BL-001/07 is always traceable." },
-  { icon: ReceiptText, title: "Sold on an invoice", where: "Sales and invoices → New sale", text: "Pick the lot and the exact slabs. GST, e-way bill and export papers are made for you." },
-  { icon: Wallet, title: "Payment received", where: "Sales and invoices → Payment column", text: "Switch Due to Received. Overdue invoices show on the dashboard." },
+  { icon: ShoppingCart, title: "Block is bought", where: "Purchases → Domestic or Import", text: "One bill, one or more blocks: supplier, quality, billed weight, rawanna, vehicle. Own quarry blocks: Inventory → Blocks → Block extracted." },
+  { icon: Truck, title: "Reaches the yard", where: "Purchases → open the bill → Received qty", text: "Enter the weight received. Costing follows it, and any shortage against the bill is flagged." },
+  { icon: Factory, title: "Cut on the saw", where: "Manufacturing unit → Block yard → Load on saw → Slabs out", text: "Enter how many slabs came out and give them a lot no." },
+  { icon: Warehouse, title: "Slabs in stock", where: "Inventory → Slabs, by lot or by slab", text: "Each lot shows its block no. and its cost per sq ft, stores included." },
+  { icon: ReceiptText, title: "Sold on an invoice", where: "Sales → New sale", text: "Pick the lot and the exact slabs. GST, e-way bill and export papers are made for you." },
+  { icon: Wallet, title: "Payment received", where: "Sales → Payment column", text: "Switch Due to Received. Overdue invoices show on the dashboard." },
 ];
 
 const GUIDES: Guide[] = [
@@ -21,37 +21,47 @@ const GUIDES: Guide[] = [
     steps: ["Read the alerts at the top. Each one says what is wrong and takes you to the record when you click it.", "Click any figure to open the section behind it.", "Use Customise dashboard to hide panels you don’t need or reorder them."],
   },
   {
-    key: "mines", view: "mines", title: "Mines and blocks",
-    what: "Every rough block, wherever it came from: your own quarry, bought from a mine owner, or imported.",
+    key: "inventory", view: "inventory", sub: "blocks", title: "Inventory",
+    what: "Every block and every slab lot you hold, with its cost so far.",
     steps: [
-      "Own quarry: click Block extracted when a block is cut. When it leaves, click Dispatch and enter the vehicle no. and e-Rawanna.",
-      "Bought from mines: click Bought block, choose the supplier and enter the bill no., rate and billed weight.",
-      "Imported blocks: they arrive here by themselves when you receive an import shipment. You can also add one with Imported block.",
-      "Running costs: log diesel, power, wire, labour and repairs once a week with Cost entry. Cost per tonne then works itself out each month.",
-      "QR labels: print a label for each block. Scanning it on a phone opens the block and lets the gate or saw team update it.",
+      "Blocks: block no., quality, supplier, weight and cost per tonne till now. Use the chips to see blocks on the road, sawn or sold, or rejected.",
+      "Click a block for everything else: date, vehicle, rawanna, size, each cost on it, the lots cut from it and every step it went through.",
+      "Own quarry: click Block extracted when a block is cut, then Dispatch when it leaves. Extraction costs and Cost per tonne sit next to the block list.",
+      "Slabs: one line per lot, with the block it came from. Cost per sq ft includes the share of stores issued that month.",
+      "Click a lot for its history: the opening entry, every sale on its own line, the total cost of the lot so far and the net margin on what is sold.",
     ],
-    tip: "Royalty and DMFT fill in from the rate in Settings. A block without a rawanna is flagged in red.",
+    tip: "QR labels print from the block list. Scanning one on a phone opens that block.",
   },
   {
-    key: "unit", view: "unit", sub: "yard", title: "Processing unit",
-    what: "The factory: block yard, saws, slabs, lots and transit damage.",
+    key: "purchases", view: "purchases", title: "Purchases",
+    what: "Blocks bought in India and imported, one bill at a time, and slabs bought from other units.",
+    steps: [
+      "Domestic: choose the supplier, then add each quality with the + button. Tick Auto for a block no. made from the quality, or type the number painted on the block.",
+      "If the supplier has more than one mine, pick the mine; with one, it is filled in for you.",
+      "Enter the billed quantity now and the received quantity when the block arrives. All costing uses the received weight.",
+      "Royalty, freight and loading are entered once for the bill and shared over its blocks by weight.",
+      "Import: the same, plus BL no. and date, CIF value and each extra charge (duty, CHA, port, freight) with a note.",
+    ],
+    tip: "Whether a supplier is Domestic or Import is set once, in Masters → Suppliers.",
+  },
+  {
+    key: "unit", view: "unit", sub: "yard", title: "Manufacturing unit",
+    what: "The factory floor: block yard, saws and transit damage.",
     steps: [
       "Block yard: when a truck arrives, click Receive and enter the weighbridge net weight.",
       "Click Load on saw when the block goes on the gang saw or wire saw.",
-      "When cutting is done, click Slabs out. Enter the number of slabs, then give all of them one lot no. or split them by range (slabs 1–12 in L-121, 13–20 in L-122). Tick any broken slab.",
-      "Slabs: every slab is listed with its block no. Tick slabs to move them to another lot or mark them broken.",
-      "Lots: each lot shows how many slabs it holds. Send a lot to the depot (or to another firm) when it leaves the unit.",
+      "When cutting is done, click Slabs out. Enter the number of slabs, then give all of them one lot no. or split them by range. Tick any broken slab.",
       "Damage: if a block cracks on the way, record it here. Its cost is spread over the blocks that came with it.",
     ],
-    tip: "Power, blades, resin, polishing and labour are filled from the rates in Settings, so cost per sq ft is ready the moment you save.",
+    tip: "Blades, resin, netting and polishing are not entered on the saw: what Stores issue each month is spread over the sq ft cut that month.",
   },
   {
-    key: "depot", view: "depot", title: "Slab stock",
-    what: "Everything ready to sell, at the unit or the depot.",
-    steps: ["Switch between By lot and By slab at the top.", "Search by lot no., block no. or variety.", "Open a lot to set its list price and rack location.", "Dealer catalogue makes a link you can send on WhatsApp so dealers see what is in stock."],
+    key: "stores", view: "stores", title: "Stores",
+    what: "Consumables bought in bulk and issued to the saws and lines: resin, mesh, blades, wire, abrasives, oil.",
+    steps: ["Add each item once with New item, with its vendor and the quantity at which to reorder.", "Click Received when a bill comes in.", "Click Issue when something goes to a machine or line. Issues to the factory are spread over the sq ft cut that month; issues to a mine go into its extraction cost.", "Items running low turn red, and Lasts shows how many days are left at the current rate of use."],
   },
   {
-    key: "sales", view: "sales", title: "Sales and invoices",
+    key: "sales", view: "sales", title: "Sales",
     what: "GST invoices for India and export invoices, with payment tracking.",
     steps: [
       "Click New sale and choose the customer.",
@@ -64,31 +74,15 @@ const GUIDES: Guide[] = [
     tip: "Use the India / Export and Due / Overdue / Paid filters to see each part of your sales on its own.",
   },
   {
-    key: "trade", view: "trade", title: "Import and export",
-    what: "Containers coming in and going out, from booking to stock.",
+    key: "parties", view: "parties", title: "Masters",
+    what: "Customers, suppliers, vendors, transporters, stone qualities and your own mines.",
     steps: [
-      "Click New import (or New export) and enter the supplier, stone and quantity.",
-      "Choose FOB or CIF. On FOB imports you book the ship: enter the forwarder, freight and insurance. The CIF value adds itself up.",
-      "Upload the bill of lading. The BL no., vessel, ports and containers are read from it for you to check.",
-      "As it moves, change the status. Free days at port count down on the dashboard.",
-      "After customs, enter the duty and charges, then click Receive. Blocks go to the yard and slabs to the depot, each with its landed cost.",
+      "Suppliers are who you buy blocks from. Mark each Domestic or Import and, for domestic ones, add their mines.",
+      "Vendors are everyone else you buy from: store items, diesel, machines on hire, wire and spares.",
+      "Transporters cover trucks coming in and going out.",
+      "Quality is the list purchases pick from. Mines are your own quarries.",
+      "For Indian parties, type the GSTIN; the state and PAN fill in for you. Call or WhatsApp a party from the list.",
     ],
-    tip: "The same steps are shown at the top of the Import and export page.",
-  },
-  {
-    key: "stores", view: "stores", title: "Stores",
-    what: "Consumables bought in bulk and issued to the saws and lines: resin, mesh, blades, wire, abrasives, oil.",
-    steps: ["Add each item once with New item, and set the quantity at which to reorder.", "Click Received when a bill comes in.", "Click Issue when something goes to a machine or line.", "Items running low turn red, and Lasts shows how many days are left at the current rate of use."],
-  },
-  {
-    key: "parties", view: "parties", title: "Customers and suppliers",
-    what: "Everyone you buy from, sell to, or hire trucks from.",
-    steps: ["Choose Indian or International at the top of the form.", "For Indian parties, type the GSTIN; the state and PAN fill in for you.", "Set credit days and a credit limit for customers. Overdue amounts show in red.", "Call or WhatsApp a party straight from the list."],
-  },
-  {
-    key: "trace", view: "trace", title: "Trace a block",
-    what: "The full story of one block, lot or slab.",
-    steps: ["Type a block no. (MW-212), lot no. (L-121) or slab no. (MW-212/07).", "You see where it came from, each firm it passed through with the challan no., which lot it went into, and which invoice sold it."],
   },
   {
     key: "tally", view: "tally", title: "Tally",
@@ -107,7 +101,7 @@ const GUIDES: Guide[] = [
       "Fill in the company name, GSTIN, address and pincode. These print on invoices.",
       "Firms: if the mine, the factory and the depot are separate companies, add each one. Then pick a firm from Working in at the top of the menu.",
       "The main account can choose All firms · group view to see everything together.",
-      "Set the royalty rate and processing rates once; they fill in on every block and sawing job.",
+      "Set the royalty rate and power and labour rates once; they fill in on every purchase and sawing job.",
       "Download a backup whenever you like.",
     ],
   },
@@ -125,7 +119,7 @@ const WORDS: [string, string][] = [
 ];
 
 export default function Help({ ctx }: { ctx: Ctx }) {
-  const [open, setOpen] = useState<string>("unit");
+  const [open, setOpen] = useState<string>("inventory");
   const [sure, setSure] = useState(false);
   const owner = ctx.mode === "demo" || !!ctx.me?.isOwner;
   const hasData = ctx.root.blocks.length + ctx.root.sales.length + ctx.root.parties.length > 0;

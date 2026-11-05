@@ -1,54 +1,37 @@
 "use client";
-import { useMemo, useState } from "react";
-import { ArrowRightLeft, Camera, ChevronDown, Download, Images, PackagePlus, Plus, Printer, Trash2 } from "lucide-react";
-import { STATES, blockCost, checkGstin, daysSince, dmy, inWords, lakh, lotRate, n0, n2, rs, rs2, saleCost, saleTaxable, saleTotals, today, uid } from "@/lib/stone/calc";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowRightLeft, Camera, ChevronDown, Download, Plus, Printer, Trash2 } from "lucide-react";
+import { STATES, blockCost, checkGstin, daysSince, dmy, inWords, lakh, n0, n2, rs, rs2, saleCost, saleTaxable, saleTotals, today, uid } from "@/lib/stone/calc";
+import { lotUnit, qualities } from "@/lib/stone/costing";
 import { PORTS, checks, eInvoice, eWayBill } from "@/lib/stone/gst";
 import type { Block, Party, Sale, SaleLine, SlabLot, StoneDB } from "@/lib/stone/types";
 import { slabCount, slabRange, syncLot } from "@/lib/stone/slabs";
-import SlabsView from "./Slabs";
 import type { Ctx } from "./StoneApp";
-import { STATUS_LABEL, VARIETIES } from "./BlockForm";
+import { STATUS_LABEL } from "./BlockForm";
 import { fileSrc } from "./files";
-import { Badge, Drawer, F, Grid, Note, NumIn, Pick, Section, Sel, Seg, Stat, Table, TextIn, Area, readPhoto, type Col } from "./ui";
-import Catalogue from "./CatalogueShare";
-import TransferForm from "./Transfer";
-
-type Tab = "stock" | "sales";
+import { Badge, Drawer, F, Grid, Note, NumIn, Pick, Section, Sel, Seg, Stat, Table, TextIn, Area, readPhoto, setUrlTab, type Col } from "./ui";
 
 const qtyUnit = (l: { blockId?: string }) => (l.blockId ? "t" : "sq ft");
 
 export const isExport = (p?: Party) => !!p?.intl;
 type Market = "all" | "india" | "export";
 
-export default function Depot({ ctx, page }: { ctx: Ctx; page: Tab }) {
+/** Sales: invoices in India and abroad, with payment tracking. Slab stock lives under Inventory. */
+export default function Depot({ ctx }: { ctx: Ctx }) {
   const { db, update } = ctx;
   const C = ctx.costs;
-  const canStock = ctx.can("stock") !== "none";
-  const canSales = ctx.can("sales") !== "none";
-  const tab: Tab = page === "sales" && canSales ? "sales" : "stock";
   const [market, setMarket] = useState<Market>(ctx.sub === "export" || ctx.sub === "india" ? ctx.sub : "all");
   const [pay, setPay] = useState<"all" | "due" | "overdue" | "paid">("all");
-  const [site, setSite] = useState<"all" | "depot" | "unit">("all");
-  const [sale, setSale] = useState<Sale | null | "new">(null);
+  const [sale, setSale] = useState<Sale | null | "new">(ctx.sub === "new" && ctx.edit("sales") ? "new" : null);
+  useEffect(() => { if (ctx.sub === "new") setUrlTab(""); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [inv, setInv] = useState<Sale | null>(null);
-  const [lotEdit, setLotEdit] = useState<SlabLot | null>(null);
-  const [buy, setBuy] = useState(false);
-  const [share, setShare] = useState(false);
-  const [view, setView] = useState<"lots" | "slabs">("lots");
   const [confirmPay, setConfirmPay] = useState<Sale | null>(null);
-  const [sendLot, setSendLot] = useState<SlabLot | null>(null);
   const clearsNow = !!db.settings.purge?.enabled && db.settings.purge.after === "paid";
+  const unitCost = (l: SlabLot) => lotUnit(ctx.root, l);
 
-  const lots = db.lots.filter((l) => l.available > 0 && (site === "all" || l.site === site));
-  const allStock = db.lots.filter((l) => l.available > 0);
-  const stockSqft = allStock.reduce((a, l) => a + l.available, 0);
-  const stockVal = allStock.reduce((a, l) => a + l.available * lotRate(l), 0);
-  const listVal = allStock.reduce((a, l) => a + l.available * (l.listRate || 0), 0);
-  const slow = allStock.filter((l) => daysSince(l.createdAt) > 90);
   const cust = (id: string) => db.parties.find((p) => p.id === id);
   const outstanding = db.sales.filter((s) => !s.paid).reduce((a, s) => a + saleTotals(s, db.settings.state, cust(s.customerId)?.state ?? db.settings.state).total, 0);
   const overdue = db.sales.filter((s) => !s.paid && daysSince(s.date) > (cust(s.customerId)?.creditDays ?? 30));
-  const inCat = allStock.filter((l) => l.catalogue).length;
   const total = (x: Sale) => saleTotals(x, db.settings.state, cust(x.customerId)?.state ?? db.settings.state).total;
   const late = (x: Sale) => !x.paid && daysSince(x.date) > (cust(x.customerId)?.creditDays ?? 30);
   const exp = (x: Sale) => isExport(cust(x.customerId));
@@ -58,33 +41,13 @@ export default function Depot({ ctx, page }: { ctx: Ctx; page: Tab }) {
   const sum = (xs: Sale[]) => xs.reduce((a, x) => a + saleTaxable(x), 0);
   const salesRows = [...db.sales].reverse().filter((x) => (market === "all" || (market === "export") === exp(x)) && (pay === "all" || (pay === "paid" ? x.paid : pay === "overdue" ? late(x) : !x.paid)));
   const marketSales = db.sales.filter((x) => market === "all" || (market === "export") === exp(x));
-
-  const src = (l: SlabLot) => {
-    const b = l.blockId ? ctx.root.blocks.find((x) => x.id === l.blockId) : undefined;
-    if (b) return { no: b.no, sub: b.source === "own_mine" ? b.mine || "Own quarry" : b.source === "import" ? "Imported block" : cust(b.supplierId)?.company ?? "Bought block" };
-    if (l.shipmentId) return { no: "Import", sub: db.shipments.find((s) => s.id === l.shipmentId)?.blNo ?? "" };
-    if (l.source === "purchase") return { no: "Bought", sub: cust(l.supplierId ?? "")?.company ?? "" };
-    return { no: "—", sub: "" };
-  };
-  const lotCols: Col<SlabLot>[] = [
-    { key: "blk", label: "Block no.", render: (l) => { const s = src(l); return <div><div className="font-medium">{s.no}</div><div className="text-[0.8rem] text-ink-3">{s.sub}</div></div>; }, sort: (l) => src(l).no },
-    { key: "lot", label: "Lot", render: (l) => <div className="flex items-center gap-2.5">{l.photos?.[0] ? <img src={fileSrc(l.photos[0])} alt="" className="h-9 w-12 shrink-0 rounded-md object-cover" /> : null}<div><div className="font-medium">{l.lotNo}</div><div className="text-[0.8rem] text-ink-3">{l.variety}{l.catalogue ? " · in catalogue" : ""}</div></div></div>, sort: (l) => l.lotNo },
-    { key: "spec", label: "Spec", render: (l) => <div><div>{l.thicknessMm} mm · {l.finish}</div><div className="text-[0.8rem] text-ink-3">Grade {l.grade}</div></div> },
-    { key: "n", label: "Slabs", align: "right", render: (l) => <div><div className="font-medium">{slabCount(l)}</div><div className="text-[0.8rem] text-ink-3">{l.slabs?.length ? `of ${l.slabs.filter((x) => x.status !== "broken").length} cut` : "not counted"}</div></div>, sort: (l) => slabCount(l) },
-    { key: "q", label: "In stock", align: "right", render: (l) => <div><div>{n0(l.available)} sq ft</div><div className="text-[0.8rem] text-ink-3">of {n0(l.sqft)}</div></div>, sort: (l) => l.available },
-    ...(C ? [{ key: "c", label: "Cost", align: "right" as const, render: (l: SlabLot) => `${rs2(lotRate(l))}`, sort: (l: SlabLot) => lotRate(l) }] : []),
-    { key: "p", label: "List", align: "right", render: (l) => l.listRate ? <div><div>{rs(l.listRate)}</div>{C && <div className={`text-[0.8rem] ${l.listRate < lotRate(l) ? "text-neg" : "text-ink-3"}`}>{l.listRate < lotRate(l) ? "below cost" : `${Math.round(((l.listRate - lotRate(l)) / l.listRate) * 100)}% margin`}</div>}</div> : <span className="text-ink-3">Set</span> },
-    { key: "w", label: "Where", render: (l) => <div><Badge tone={l.site === "depot" ? "good" : "plain"}>{l.site === "depot" ? "Depot" : "Unit"}</Badge><div className="mt-0.5 text-[0.8rem] text-ink-3">{l.location}</div></div> },
-    { key: "age", label: "Age", align: "right", render: (l) => { const a = daysSince(l.createdAt); return <span className={a > 90 ? "text-warn" : ""}>{a} d</span>; }, sort: (l) => daysSince(l.createdAt) },
-  ];
-
   const saleCols: Col<Sale>[] = [
     { key: "no", label: "Invoice", render: (s) => <div><div className="whitespace-nowrap font-medium">{s.invoiceNo}</div><div className="text-[0.8rem] text-ink-3">{dmy(s.date)}{s.irn ? " · IRN" : ""}{s.ewayBill ? " · EWB" : ""}</div></div>, sort: (s) => s.date },
     { key: "c", label: "Customer", render: (s) => { const c = cust(s.customerId); return <div><div>{c?.company ?? "—"}</div><div className="text-[0.8rem] text-ink-3">{[c?.city, c?.intl ? c.country : ""].filter(Boolean).join(", ")}{c?.intl && <span className="ml-1.5 rounded-full bg-surface-2 px-1.5 py-0.5 text-[0.7rem] font-medium text-ink-2">Export</span>}</div></div>; } },
     { key: "lot", label: "Lot sold", render: (s) => <div className="space-y-0.5">{s.lines.map((l) => { const lot = db.lots.find((x) => x.id === l.lotId); const b = db.blocks.find((x) => x.id === l.blockId); return <div key={l.lotId || l.blockId} className="whitespace-nowrap">{b ? <span className="font-medium">Block {b.no}</span> : <><span className="font-medium">{lot?.lotNo ?? "Lot removed"}</span><span className="text-[0.8rem] text-ink-3">{lot ? ` · ${lot.variety}` : ""}{l.slabIds?.length ? ` · ${l.slabIds.length} slab${l.slabIds.length > 1 ? "s" : ""}` : ""}</span></>}</div>; })}</div>, sort: (s) => db.lots.find((x) => x.id === s.lines[0]?.lotId)?.lotNo ?? "" },
     { key: "q", label: "Qty", align: "right", render: (s) => <span className="whitespace-nowrap">{s.lines.some((l) => l.blockId) ? `${n2(s.lines.reduce((a, l) => a + l.sqft, 0))} t` : `${n0(s.lines.reduce((a, l) => a + l.sqft, 0))} sq ft`}</span> },
     { key: "t", label: "Total", align: "right", render: (s) => rs(saleTotals(s, db.settings.state, cust(s.customerId)?.state ?? "08").total), sort: (s) => saleTaxable(s) },
-    ...(C ? [{ key: "m", label: "Margin", align: "right" as const, render: (s: Sale) => { const tx = saleTaxable(s) - s.freight; const m = tx - saleCost(s, db.lots, db.blocks); return <span className={m < 0 ? "text-neg" : ""}>{tx ? `${Math.round((m / tx) * 100)}%` : "—"}</span>; } }] : []),
+    ...(C ? [{ key: "m", label: "Margin", align: "right" as const, render: (s: Sale) => { const tx = saleTaxable(s) - s.freight; const m = tx - saleCost(s, ctx.root.lots, ctx.root.blocks, unitCost); return <span className={m < 0 ? "text-neg" : ""}>{tx ? `${Math.round((m / tx) * 100)}%` : "—"}</span>; } }] : []),
     { key: "p", label: "Payment", render: (s) => { const late = !s.paid && daysSince(s.date) > (cust(s.customerId)?.creditDays ?? 30); const tone = s.paid ? "bg-accent-soft text-accent" : late ? "bg-neg-soft text-neg" : "bg-warn-soft text-warn"; const label = s.paid ? "Received" : late ? `Overdue ${daysSince(s.date)} d` : "Due";
       if (!ctx.edit("sales")) return <Badge tone={s.paid ? "good" : late ? "neg" : "warn"}>{label}</Badge>;
       return (
@@ -100,49 +63,30 @@ export default function Depot({ ctx, page }: { ctx: Ctx; page: Tab }) {
     { key: "a", label: "", render: (s) => <div className="flex justify-end" onClick={(e) => e.stopPropagation()}><button className="btn btn-quiet btn-sm" onClick={() => setInv(s)}><Printer size={13} />Invoice</button></div> },
   ];
 
+  if (sale) return <SaleForm ctx={ctx} initial={sale === "new" ? null : sale} onClose={() => setSale(null)} onSaved={(s) => { setSale(null); setInv(s); }} />;
   return (
     <div>
-      {tab === "stock" ? (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="Slab stock" value={`${n0(stockSqft)} sq ft`} sub={`${allStock.length} lots · ${n0(allStock.reduce((a, l) => a + slabCount(l), 0))} slabs`} />
-          {C ? <Stat label="Stock at cost" value={lakh(stockVal)} sub={listVal ? `${lakh(listVal)} at list price` : undefined} /> : <Stat label="Stock at list price" value={lakh(listVal)} sub={`${inCat} lots in the dealer catalogue`} />}
-          <Stat label="Older than 90 days" value={`${n0(slow.reduce((a, l) => a + l.available, 0))} sq ft`} sub={slow.length ? `${slow.length} lots` : "None"} tone={slow.length ? "warn" : undefined} />
-          <Stat label="In dealer catalogue" value={`${inCat} lots`} sub={`${n0(allStock.filter((l) => l.site === "depot").reduce((a, l) => a + l.available, 0))} sq ft at depot`} />
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="India sales, last 30 days" value={lakh(sum(recent.filter((x) => !exp(x))))} sub={`${recent.filter((x) => !exp(x)).length} invoices · ${lakh(sum(fy.filter((x) => !exp(x))))} this year`} />
-          <Stat label="Export sales, last 30 days" value={lakh(sum(recent.filter(exp)))} sub={`${recent.filter(exp).length} invoices · ${lakh(sum(fy.filter(exp)))} this year`} />
-          <Stat label="To collect" value={lakh(outstanding)} sub={`India ${lakh(db.sales.filter((x) => !x.paid && !exp(x)).reduce((a, x) => a + total(x), 0))} · export ${lakh(db.sales.filter((x) => !x.paid && exp(x)).reduce((a, x) => a + total(x), 0))}`} />
-          <Stat label="Past credit days" value={`${overdue.length}`} sub={overdue.length ? lakh(overdue.reduce((a, x) => a + total(x), 0)) : "Nothing overdue"} tone={overdue.length ? "neg" : undefined} />
-        </div>
-      )}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="India sales, last 30 days" value={lakh(sum(recent.filter((x) => !exp(x))))} sub={`${recent.filter((x) => !exp(x)).length} invoices · ${lakh(sum(fy.filter((x) => !exp(x))))} this year`} />
+        <Stat label="Export sales, last 30 days" value={lakh(sum(recent.filter(exp)))} sub={`${recent.filter(exp).length} invoices · ${lakh(sum(fy.filter(exp)))} this year`} />
+        <Stat label="To collect" value={lakh(outstanding)} sub={`India ${lakh(db.sales.filter((x) => !x.paid && !exp(x)).reduce((a, x) => a + total(x), 0))} · export ${lakh(db.sales.filter((x) => !x.paid && exp(x)).reduce((a, x) => a + total(x), 0))}`} />
+        <Stat label="Past credit days" value={`${overdue.length}`} sub={overdue.length ? lakh(overdue.reduce((a, x) => a + total(x), 0)) : "Nothing overdue"} tone={overdue.length ? "neg" : undefined} />
+      </div>
 
       <div className="mt-8 flex flex-wrap items-center gap-3">
-        {tab === "sales" && <Seg value={market} onChange={setMarket} tabs={[{ key: "all", label: "All sales", count: db.sales.length }, { key: "india", label: "India", count: db.sales.filter((x) => !exp(x)).length }, { key: "export", label: "Export", count: db.sales.filter(exp).length }]} />}
-        {tab === "sales" && <Seg value={pay} onChange={setPay} tabs={[{ key: "all", label: "Any payment" }, { key: "due", label: "Due", count: marketSales.filter((x) => !x.paid).length }, { key: "overdue", label: "Overdue", count: marketSales.filter(late).length }, { key: "paid", label: "Received" }]} />}
-        {tab === "stock" && <Seg value={view} onChange={setView} tabs={[{ key: "lots", label: "By lot" }, { key: "slabs", label: "By slab" }]} />}
-        {tab === "stock" && view === "lots" && ctx.mods.processing && <Seg value={site} onChange={setSite} tabs={[{ key: "all", label: "All" }, { key: "depot", label: "Depot" }, { key: "unit", label: "Unit" }]} />}
+        <Seg value={market} onChange={setMarket} tabs={[{ key: "all", label: "All sales", count: db.sales.length }, { key: "india", label: "India", count: db.sales.filter((x) => !exp(x)).length }, { key: "export", label: "Export", count: db.sales.filter(exp).length }]} />
+        <Seg value={pay} onChange={setPay} tabs={[{ key: "all", label: "Any payment" }, { key: "due", label: "Due", count: marketSales.filter((x) => !x.paid).length }, { key: "overdue", label: "Overdue", count: marketSales.filter(late).length }, { key: "paid", label: "Received" }]} />
         <div className="ml-auto flex flex-wrap gap-2">
-          {tab === "stock" && <button className="btn btn-quiet btn-sm" onClick={() => setShare(true)}><Images size={15} />Dealer catalogue</button>}
-          {tab === "stock" && ctx.edit("stock") && (ctx.mods.trading || ctx.mods.depot) && <button className="btn btn-quiet btn-sm" onClick={() => setBuy(true)}><PackagePlus size={15} />Slabs bought</button>}
-          {tab === "sales" && ctx.edit("sales") && <button className="btn btn-primary btn-sm" onClick={() => setSale("new")}><Plus size={15} />{market === "export" ? "New export sale" : "New sale"}</button>}
+          {ctx.edit("sales") && <button className="btn btn-primary btn-sm" onClick={() => setSale("new")}><Plus size={15} />{market === "export" ? "New export sale" : "New sale"}</button>}
         </div>
       </div>
       <div className="mt-4">
-        {tab === "stock" && view === "slabs" && <SlabsView ctx={ctx} />}
-        {tab === "stock" && view === "lots" && <Table rows={lots} cols={lotCols} onRow={setLotEdit} search={(l) => `${src(l).no} ${l.lotNo} ${l.variety} ${l.location} ${l.finish}`} empty="No slabs in stock." initialSort={{ key: "age", dir: -1 }} />}
-        {tab === "sales" && db.settings.purge?.enabled && <div className="mb-3"><Note>Paid invoices are deleted {db.settings.purge.after === "paid" ? "as soon as payment is marked received" : `${db.settings.purge.days} days after payment`}. Change this in Settings.</Note></div>}
-        {tab === "sales" && market !== "all" && salesRows.length > 0 && <div className="mb-3 text-sm text-ink-2">{salesRows.length} invoices · {lakh(sum(salesRows))} before GST · {lakh(salesRows.reduce((a, x) => a + total(x), 0))} billed</div>}
-        {tab === "sales" && <Table rows={salesRows} cols={saleCols} onRow={(s) => (ctx.edit("sales") ? setSale(s) : setInv(s))} search={(s) => `${s.invoiceNo} ${cust(s.customerId)?.company} ${cust(s.customerId)?.country ?? ""} ${s.vehicleNo} ${s.lines.map((l) => db.lots.find((x) => x.id === l.lotId)?.lotNo ?? "").join(" ")}`} empty={market === "export" ? "No export sales yet. Add an international customer under Customers and suppliers, then make a sale to them." : market === "india" ? "No sales in India yet." : "No sales yet."} />}
+        {db.settings.purge?.enabled && <div className="mb-3"><Note>Paid invoices are deleted {db.settings.purge.after === "paid" ? "as soon as payment is marked received" : `${db.settings.purge.days} days after payment`}. Change this in Settings.</Note></div>}
+        {market !== "all" && salesRows.length > 0 && <div className="mb-3 text-sm text-ink-2">{salesRows.length} invoices · {lakh(sum(salesRows))} before GST · {lakh(salesRows.reduce((a, x) => a + total(x), 0))} billed</div>}
+        <Table rows={salesRows} cols={saleCols} onRow={(s) => (ctx.edit("sales") ? setSale(s) : setInv(s))} search={(s) => `${s.invoiceNo} ${cust(s.customerId)?.company} ${cust(s.customerId)?.country ?? ""} ${s.vehicleNo} ${s.lines.map((l) => db.lots.find((x) => x.id === l.lotId)?.lotNo ?? "").join(" ")}`} empty={market === "export" ? "No export sales yet. Add an international customer under Masters → Customers, then make a sale to them." : market === "india" ? "No sales in India yet." : "No sales yet."} />
       </div>
 
-      {sale && <SaleForm ctx={ctx} initial={sale === "new" ? null : sale} onClose={() => setSale(null)} onSaved={(s) => { setSale(null); setInv(s); }} />}
       {inv && <Invoice ctx={ctx} sale={db.sales.find((x) => x.id === inv.id) ?? inv} onClose={() => setInv(null)} />}
-      {sendLot && <TransferForm ctx={ctx} item={sendLot} kind="lot" onClose={() => setSendLot(null)} />}
-      {lotEdit && <LotForm ctx={ctx} lot={lotEdit} onSend={ctx.firms.length > 1 && ctx.edit("stock") ? () => { setSendLot(lotEdit); setLotEdit(null); } : undefined} onClose={() => setLotEdit(null)} onSave={(l) => { update((d) => { const i = d.lots.findIndex((x) => x.id === l.id); d.lots[i] = l; }); setLotEdit(null); }} />}
-      {buy && <BuyForm ctx={ctx} onClose={() => setBuy(false)} />}
-      {share && <Catalogue ctx={ctx} onClose={() => setShare(false)} />}
       {confirmPay && (
         <Drawer open title={`Payment received for ${confirmPay.invoiceNo}?`} sub={`${cust(confirmPay.customerId)?.company ?? ""} · ${rs(total(confirmPay))}`} onClose={() => setConfirmPay(null)}
           footer={<><button className="btn btn-primary" onClick={() => { const id = confirmPay.id; update((d) => { const x = d.sales.find((y) => y.id === id); if (x) { x.paid = true; x.paidOn = today(); } }); ctx.say(`${confirmPay.invoiceNo} received and cleared`, "good"); setConfirmPay(null); }}>Mark received and delete</button><button className="btn btn-quiet" onClick={() => setConfirmPay(null)}>Cancel</button></>}>
@@ -154,7 +98,8 @@ export default function Depot({ ctx, page }: { ctx: Ctx; page: Tab }) {
   );
 }
 
-function LotForm({ ctx, lot, onSave, onClose, onSend }: { ctx: Ctx; lot: SlabLot; onSave: (l: SlabLot) => void; onClose: () => void; onSend?: () => void }) {
+
+export function LotForm({ ctx, lot, onSave, onClose, onSend }: { ctx: Ctx; lot: SlabLot; onSave: (l: SlabLot) => void; onClose: () => void; onSend?: () => void }) {
   const [l, setL] = useState<SlabLot>({ ...lot, photos: lot.photos ?? [] });
   const can = ctx.edit("stock");
   const add = async (files: FileList | null) => {
@@ -163,7 +108,7 @@ function LotForm({ ctx, lot, onSave, onClose, onSend }: { ctx: Ctx; lot: SlabLot
     setL((x) => ({ ...x, photos: [...(x.photos ?? []), ...urls].slice(0, 8) }));
   };
   return (
-    <Drawer open title={`Lot ${lot.lotNo}`} sub={`${lot.variety} · ${lot.thicknessMm} mm ${lot.finish}${ctx.costs ? ` · cost ${rs2(lotRate(lot))}/sq ft` : ""}`} onClose={onClose}
+    <Drawer open title={`Lot ${lot.lotNo}`} sub={`${lot.variety} · ${lot.thicknessMm} mm ${lot.finish}${ctx.costs ? ` · cost ${rs2(lotUnit(ctx.root, lot))}/sq ft` : ""}`} onClose={onClose}
       footer={can ? <><button className="btn btn-primary" onClick={() => onSave(l)}>Save</button><button className="btn btn-quiet" onClick={onClose}>Cancel</button>{onSend && <button className="btn btn-quiet btn-sm ml-auto" onClick={onSend}><ArrowRightLeft size={14} />Send to firm</button>}</> : <button className="btn btn-quiet" onClick={onClose}>Close</button>}>
       <Grid>
         <F label="List price"><NumIn value={l.listRate} onChange={(v) => setL({ ...l, listRate: v })} suffix="₹/sq ft" /></F>
@@ -198,7 +143,7 @@ function LotForm({ ctx, lot, onSave, onClose, onSend }: { ctx: Ctx; lot: SlabLot
   );
 }
 
-function BuyForm({ ctx, onClose }: { ctx: Ctx; onClose: () => void }) {
+export function BuyForm({ ctx, onClose }: { ctx: Ctx; onClose: () => void }) {
   const { db, update } = ctx;
   const suppliers = db.parties.filter((p) => p.kind === "supplier");
   const [f, setF] = useState({ supplierId: "", invoiceNo: "", date: today(), variety: "", stoneType: "marble" as SlabLot["stoneType"], thicknessMm: 18, finish: "Polished", grade: "A" as SlabLot["grade"], pieces: 0, sqft: 0, rate: 0, freight: 0, gstRate: 18, listRate: 0, location: "" });
@@ -218,7 +163,7 @@ function BuyForm({ ctx, onClose }: { ctx: Ctx; onClose: () => void }) {
   };
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF({ ...f, [k]: v });
   return (
-    <Drawer open wide title="Slabs bought" sub="Slabs bought from another unit or importer go straight into stock with their cost." onClose={onClose}
+    <Drawer open wide page title="Slabs bought" sub="Slabs bought from another unit or importer go straight into stock with their cost." onClose={onClose}
       footer={<><button className="btn btn-primary" disabled={Boolean(err)} onClick={save}>Add to stock</button><button className="btn btn-quiet" onClick={onClose}>Cancel</button>{err && <span className="text-sm text-ink-3">{err}</span>}</>}>
       <Section title="Supplier bill">
         <Grid cols={3}>
@@ -230,7 +175,7 @@ function BuyForm({ ctx, onClose }: { ctx: Ctx; onClose: () => void }) {
       </Section>
       <Section title="Slabs">
         <Grid cols={3}>
-          <F label="Variety" span={2}><TextIn value={f.variety} onChange={(v) => set("variety", v)} list="buy-varieties" placeholder="Rajnagar White" /><datalist id="buy-varieties">{[...new Set([...VARIETIES, ...db.lots.map((l) => l.variety)])].map((v) => <option key={v} value={v} />)}</datalist></F>
+          <F label="Quality" span={2}><TextIn value={f.variety} onChange={(v) => set("variety", v)} list="buy-varieties" placeholder="Rajnagar White" /><datalist id="buy-varieties">{qualities(db).map((v) => <option key={v} value={v} />)}</datalist></F>
           <F label="Stone"><Sel value={f.stoneType} onChange={(v) => set("stoneType", v as SlabLot["stoneType"])} options={["marble", "granite", "sandstone", "quartzite", "onyx", "other"].map((v) => ({ v, l: v[0].toUpperCase() + v.slice(1) }))} /></F>
           <F label="Thickness"><NumIn value={f.thicknessMm} onChange={(v) => set("thicknessMm", v)} suffix="mm" /></F>
           <F label="Finish"><Sel value={f.finish} onChange={(v) => set("finish", v)} options={["Polished", "Honed", "Leather", "Flamed", "Rough-cut"].map((v) => ({ v, l: v }))} /></F>
@@ -306,7 +251,7 @@ function SaleForm({ ctx, initial, onClose, onSaved }: { ctx: Ctx; initial: Sale 
   const avail = (id: string) => (db.lots.find((l) => l.id === id)?.available ?? 0) + (orig[id] ?? 0);
   const c = db.parties.find((p) => p.id === s.customerId);
   const t = saleTotals(s, db.settings.state, c?.state ?? db.settings.state);
-  const cost = saleCost(s, db.lots, db.blocks);
+  const cost = saleCost(s, db.lots, db.blocks, (l) => lotUnit(ctx.root, l));
   const err = !s.customerId ? "Choose a customer" : !s.lines.length ? "Add at least one lot or block" : s.lines.some((l) => l.slabIds && !l.slabIds.length) ? "Pick the slabs for each lot" : s.lines.some((l) => !l.blockId && l.sqft > avail(l.lotId)) ? "More sq ft than in stock" : "";
   const isBlockSale = s.lines.some((l) => l.blockId);
 
@@ -335,7 +280,7 @@ function SaleForm({ ctx, initial, onClose, onSaved }: { ctx: Ctx; initial: Sale 
   };
 
   return (
-    <Drawer open wide title={initial ? `Invoice ${initial.invoiceNo}` : "New sale"} sub={C ? "Pick lots or blocks. Prices below cost are flagged before you bill." : "Pick lots or blocks from stock."} onClose={onClose}
+    <Drawer open wide page title={initial ? `Invoice ${initial.invoiceNo}` : "New sale"} sub={C ? "Pick lots or blocks. Prices below cost are flagged before you bill." : "Pick lots or blocks from stock."} onClose={onClose}
       footer={<><button className="btn btn-primary" disabled={Boolean(err)} onClick={save}>{initial ? "Save" : "Save and view invoice"}</button><button className="btn btn-quiet" onClick={onClose}>Cancel</button>{err && <span className="text-sm text-ink-3">{err}</span>}{initial && <button className="btn btn-quiet btn-sm ml-auto !text-neg" onClick={del}>Cancel invoice</button>}</>}>
       <Section title="Bill to">
         <Grid cols={3}>
@@ -370,12 +315,12 @@ function SaleForm({ ctx, initial, onClose, onSaved }: { ctx: Ctx; initial: Sale 
           {s.lines.map((ln, i) => {
             const lot = db.lots.find((l) => l.id === ln.lotId);
             const b = db.blocks.find((x) => x.id === ln.blockId);
-            const unitCost = b ? blockCost(b) / Math.max(0.01, ln.sqft) : lot ? lotRate(lot) : 0;
+            const unitCost = b ? blockCost(b) / Math.max(0.01, ln.sqft) : lot ? lotUnit(ctx.root, lot) : 0;
             const below = C && ln.rate > 0 && ln.rate < unitCost;
             return (
               <div key={ln.lotId || ln.blockId} className="grid items-end gap-2 rounded-xl bg-surface p-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
                 {b ? <div><div className="font-medium">Block {b.no} · {b.variety}</div><div className="text-[0.8rem] text-ink-3">{b.l}×{b.w}×{b.h} cm{C ? ` · cost ${rs(unitCost)}/t` : ""}</div></div>
-                  : <div><div className="font-medium">{lot?.lotNo} · {lot?.variety}</div><div className="text-[0.8rem] text-ink-3">{lot?.thicknessMm} mm {lot?.finish} · {n0(avail(ln.lotId))} sq ft available{C && lot ? ` · cost ${rs2(lotRate(lot))}` : ""}</div></div>}
+                  : <div><div className="font-medium">{lot?.lotNo} · {lot?.variety}</div><div className="text-[0.8rem] text-ink-3">{lot?.thicknessMm} mm {lot?.finish} · {n0(avail(ln.lotId))} sq ft available{C && lot ? ` · cost ${rs2(lotUnit(ctx.root, lot))}` : ""}</div></div>}
                 {lot?.slabs?.length ? <F label="Sq ft"><div className="field num">{n2(ln.sqft)}</div></F> : <F label={b ? "Tonnes" : "Sq ft"} err={!b && ln.sqft > avail(ln.lotId) ? "Exceeds stock" : undefined}><NumIn value={ln.sqft} onChange={(v) => setS({ ...s, lines: s.lines.map((x, j) => j === i ? { ...x, sqft: v } : x) })} /></F>}
                 <F label="Rate" err={below ? "Below cost" : undefined}><NumIn value={ln.rate} onChange={(v) => setS({ ...s, lines: s.lines.map((x, j) => j === i ? { ...x, rate: v } : x) })} suffix={b ? "₹/t" : "₹/sq ft"} /></F>
                 <button className="btn btn-quiet btn-sm !px-2" aria-label="Remove line" onClick={() => setS({ ...s, lines: s.lines.filter((_, j) => j !== i) })}><Trash2 size={14} /></button>

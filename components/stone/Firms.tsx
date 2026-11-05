@@ -21,7 +21,7 @@ export default function FirmsSettings({ ctx }: { ctx: Ctx }) {
 
   return (
     <Section title="Firms in your group" aside={owner ? <button className="btn btn-quiet btn-sm" onClick={() => setEdit("new")}><Plus size={14} />Add firm</button> : undefined}>
-      <p className="-mt-1 mb-3 text-[0.9rem] text-ink-2">Run the mine, the processing unit and the depot as separate companies? Add each one. Pick a firm in the sidebar to see only its sections and figures. Blocks and lots move between firms with a challan, and keep their numbers.</p>
+      <p className="-mt-1 mb-3 text-[0.9rem] text-ink-2">Run the mine, the manufacturing unit and the depot as separate companies? Add each one. Pick a firm in the sidebar to see only its sections and figures. Blocks and lots move between firms with a challan, and keep their numbers.</p>
       {firms.length < 2 ? (
         <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-surface px-4 py-3 text-[0.9rem]">
           <Building2 size={16} className="text-ink-3" />

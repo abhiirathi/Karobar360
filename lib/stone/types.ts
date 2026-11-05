@@ -8,9 +8,12 @@ export type BlockStatus = "at_mine" | "in_transit" | "in_yard" | "on_saw" | "saw
 export type Grade = "A" | "B" | "C" | "Commercial";
 export type RateBasis = "tonne" | "cbm";
 
+export type PartyKind = "customer" | "supplier" | "vendor" | "transporter" | "quality" | "mine";
+
+/** A master record: customer, block supplier, vendor, transporter, stone quality or own mine. */
 export interface Party {
   id: string;
-  kind: "customer" | "supplier" | "transporter";
+  kind: PartyKind;
   name: string; // person / proprietor
   company: string;
   gstin: string;
@@ -31,6 +34,9 @@ export interface Party {
   bank: string;
   notes: string;
   createdAt: string;
+  mines?: string[]; // block supplier's quarries
+  leaseNo?: string; // own mine
+  stoneType?: StoneType; // quality
 }
 
 export interface Block {
@@ -76,6 +82,24 @@ export interface Block {
   notes: string;
   firmId?: string; // firm holding the block now; empty = the first firm
   trail?: Transfer[]; // moves between the group's firms, oldest first
+  purchaseId?: string; // blocks entered together on one purchase bill
+  imp?: ImportBill; // import purchase: BL, CIF and charges of the whole bill
+}
+
+export interface ImportCharge {
+  label: string;
+  amount: number; // ₹
+  note: string;
+}
+
+/** BL, CIF value and extra charges of one import purchase, copied on each of its blocks. */
+export interface ImportBill {
+  blNo: string;
+  blDate: string;
+  vessel: string;
+  port: string;
+  cif: number; // ₹, CIF value of the whole bill
+  charges: ImportCharge[];
 }
 
 /** A move of a block or lot from one firm of the group to another. */
@@ -105,7 +129,8 @@ export interface Firm {
   modules: Modules;
 }
 
-export type MineCostCat = "diesel" | "power" | "wire" | "labour" | "tools" | "maintenance" | "royalty" | "rent" | "other";
+// "stores" is never entered by hand: it is what the store issued to the quarry.
+export type MineCostCat = "diesel" | "power" | "wire" | "machine" | "consumables" | "labour" | "tools" | "maintenance" | "loading" | "royalty" | "rent" | "other" | "stores";
 
 export interface MineCost {
   id: string;
@@ -119,6 +144,8 @@ export interface MineCost {
   amount: number;
   note: string;
   firmId?: string;
+  vendorId?: string; // machine owner, diesel pump, wire supplier
+  billNo?: string;
 }
 
 export interface SawJob {
@@ -316,6 +343,7 @@ export interface StoreItem {
   rate: number; // last purchase rate, ₹ per unit
   location: string;
   notes: string;
+  vendorId?: string; // usual vendor, from Masters
 }
 
 export interface StoreMove {
