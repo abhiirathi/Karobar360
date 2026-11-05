@@ -185,7 +185,7 @@ export default function Home() {
               </tbody>
             </table>
           </div>
-          <p className="mt-6 text-sm text-ink-3">Setup starts at ₹35,000. Prices exclude GST.</p>
+          <p className="mt-6 text-sm text-ink-3">Setup starts at ₹35,000. Prices exclude GST. <Link href="/pricing" className="text-accent hover:underline">See what each plan includes, or ask for a custom price</Link>.</p>
         </section>
 
         <section className="bg-accent text-accent-ink">

@@ -12,6 +12,9 @@ export const kindLabel = (k: FirmKind) => FIRM_KINDS.find((x) => x.key === k)?.l
 export const kindModules = (k: FirmKind) => presetModules(FIRM_KINDS.find((x) => x.key === k)?.m ?? {});
 
 export const firmsOf = (s: StoneSettings | undefined): Firm[] => s?.firms ?? [];
+/** The order stone moves in: mine, then processing, then distribution. Used wherever firms are listed. */
+const FLOW: Record<FirmKind, number> = { mine: 0, processing: 1, distribution: 2, trade: 3, other: 4 };
+export const orderedFirms = (s: StoneSettings | undefined): Firm[] => firmsOf(s).map((f, i) => ({ f, i })).sort((a, b) => (FLOW[a.f.kind] ?? 9) - (FLOW[b.f.kind] ?? 9) || a.i - b.i).map((x) => x.f);
 export const multiFirm = (s: StoneSettings | undefined) => firmsOf(s).length > 1;
 /** Records made before firms were set up belong to the first firm. */
 export const firmOf = (x: { firmId?: string }, s: StoneSettings) => x.firmId || firmsOf(s)[0]?.id || "";

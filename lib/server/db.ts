@@ -127,6 +127,20 @@ function local(fn: string, a: Record<string, unknown>): unknown {
       out = o && k && k.length >= 12 ? { id: o.id, name: o.name } : null;
       break;
     }
+    case "k_weigh_put": {
+      const k = s("p_key");
+      const o = d.orgs.find((x) => x.tally_key === k);
+      if (!o || !k || k.length < 12) { out = null; break; }
+      const w = ((d as unknown as { weigh?: Record<string, unknown> }).weigh ??= {});
+      w[o.id] = { weight: Number(a.p_weight), stable: !!a.p_stable, device: s("p_device"), at: new Date().toISOString() };
+      out = { name: o.name };
+      break;
+    }
+    case "k_weigh_get": {
+      const r = ((d as unknown as { weigh?: Record<string, { at: string }> }).weigh ?? {})[s("p_org")];
+      out = r ? { ...r, age: (Date.now() - new Date(r.at).getTime()) / 1000 } : null;
+      break;
+    }
     case "k_request_add": {
       const r = { id: randomUUID(), kind: s("p_kind"), name: s("p_name"), company: s("p_company"), phone: s("p_phone"), email: s("p_email"), message: s("p_message"), details: a.p_details, created_at: new Date().toISOString(), emailed: false };
       ((d as unknown as { requests?: unknown[] }).requests ??= []).push(r);

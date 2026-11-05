@@ -49,6 +49,8 @@ export interface Block {
   tonnes: number; // weighbridge net at our gate
   billedTonnes: number; // as per supplier bill / rawanna
   weighSlip: string;
+  /** Gross and tare in kg, from the weighbridge connector or typed in. */
+  weigh?: { gross?: number; tare?: number; grossAt?: string; tareAt?: string; source: "weighbridge" | "manual"; device?: string };
   rate: number; // ₹ per tonne or per CBM
   rateBasis: RateBasis;
   royalty: number; // ₹

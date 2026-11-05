@@ -1,16 +1,17 @@
 "use client";
 import { useMemo, useState } from "react";
-import { AlertTriangle, ArrowRight, Play, Plus, QrCode, Scissors } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, ChevronRight, Play, Plus, QrCode, Scissors } from "lucide-react";
 import { baseCost, blockCost, cbm, daysSince, dmy, jobCost, lotRate, n0, n2, perTonne, r2, rs, rs2, spreadDamage, theoreticalSlabs, today, uid, weightGap, damageNet, lakh } from "@/lib/stone/calc";
 import type { Block, DamageEvent, SawJob, Slab, SlabLot } from "@/lib/stone/types";
 import { nextLotNo, slabArea, slabCount, slabNo, syncLot } from "@/lib/stone/slabs";
 import { firmOf } from "@/lib/stone/firms";
 import type { Ctx } from "./StoneApp";
+import { WeighCapture } from "./Weigh";
 import BlockForm, { STATUS_LABEL } from "./BlockForm";
 import QrLabels from "./QrLabels";
 import TransferForm from "./Transfer";
 import SlabsView from "./Slabs";
-import { Badge, Drawer, F, Grid, Note, NumIn, Section, Sel, Seg, Stat, Table, TextIn, Area, type Col } from "./ui";
+import { Badge, Drawer, F, Grid, Note, NumIn, Section, Sel, Stat, Table, TextIn, Area, type Col } from "./ui";
 
 type Tab = "yard" | "sawing" | "slabs" | "lots" | "damage";
 
@@ -33,6 +34,10 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
 
   const yard = db.blocks.filter((b) => ["in_transit", "in_yard", "on_saw"].includes(b.status));
   const inYard = yard.filter((b) => b.status !== "in_transit");
+  const transit = yard.filter((b) => b.status === "in_transit");
+  const waiting = yard.filter((b) => b.status === "in_yard");
+  const onSaw = yard.filter((b) => b.status === "on_saw");
+  const slabsInStock = db.lots.reduce((a, l) => a + (l.slabs?.filter((x) => x.status === "stock").length ?? 0), 0);
   const unitLots = db.lots.filter((l) => l.site === "unit" && l.available > 0);
   const jobsMonth = db.jobs.filter((j) => daysSince(j.finishedOn) <= 30);
   const varAvg = useMemo(() => {
@@ -55,7 +60,7 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
   const yardCols: Col<Block>[] = [
     { key: "no", label: "Block", render: (b) => <div><div className="font-medium">{b.no}</div><div className="text-[0.8rem] text-ink-3">{b.variety} · {b.grade}</div></div>, sort: (b) => b.no },
     { key: "src", label: "From", render: (b) => <div><div>{b.source === "own_mine" ? "Own quarry" : b.source === "import" ? "Import" : db.parties.find((p) => p.id === b.supplierId)?.company ?? "—"}</div><div className="text-[0.8rem] text-ink-3">{b.vehicleNo}</div></div> },
-    { key: "t", label: "Tonnes", align: "right", render: (b) => { const g = weightGap(b); return <div><div>{n2(b.tonnes || b.billedTonnes)}</div>{g > 0.02 && <div className="text-[0.78rem] text-warn">billed {n2(b.billedTonnes)}</div>}</div>; }, sort: (b) => b.tonnes },
+    { key: "t", label: "Tonnes", align: "right", render: (b) => { const g = weightGap(b); return <div><div>{n2(b.tonnes || b.billedTonnes)}</div>{g > 0.02 && <div className="text-[0.78rem] text-warn">billed {n2(b.billedTonnes)}</div>}{b.weigh?.source === "weighbridge" && b.weigh.tare !== undefined && <div className="text-[0.78rem] text-accent">weighbridge</div>}</div>; }, sort: (b) => b.tonnes },
     ...(C ? [{ key: "c", label: "₹ / tonne", align: "right" as const, render: (b: Block) => <div><div>{b.tonnes ? rs(perTonne(b)) : "—"}</div>{b.damageAlloc > 0 && <div className="text-[0.78rem] text-warn">+{rs(b.damageAlloc)} damage</div>}</div>, sort: (b: Block) => perTonne(b) }] : []),
     { key: "age", label: "In yard", align: "right", render: (b) => b.receivedOn ? `${daysSince(b.receivedOn)} d` : "—", sort: (b) => (b.receivedOn ? daysSince(b.receivedOn) : -1) },
     { key: "st", label: "Status", render: (b) => <Badge tone={b.status === "in_transit" ? "warn" : b.status === "on_saw" ? "good" : "plain"}>{STATUS_LABEL[b.status]}</Badge> },
@@ -98,20 +103,36 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
         {C ? <Stat label="Slab cost, last 60 days" value={`${rs2(avgCost)}/sq ft`} sub="Block + royalty + freight + damage + processing" /> : <Stat label="Slabs at unit" value={`${n0(unitLots.reduce((a, l) => a + l.available, 0))} sq ft`} sub={`${unitLots.length} lots`} />}
       </div>
 
-      <div className="mt-8 flex flex-wrap items-center gap-3">
-        <Seg value={tab} onChange={setTab} tabs={([
-          { key: "yard", label: "Block yard", count: yard.length },
-          { key: "sawing", label: "Sawing log", count: db.jobs.length },
-          { key: "slabs", label: "Slabs", count: db.lots.reduce((a, l) => a + (l.slabs?.filter((x) => x.status === "stock").length ?? 0), 0) },
-          { key: "lots", label: "Lots at unit", count: unitLots.length },
-          { key: "damage", label: "Damage & loss", count: db.damages.length },
-        ] as { key: Tab; label: string; count: number }[]).filter((t) => allowed.includes(t.key))} />
-        <div className="ml-auto flex gap-2">
-          {tab === "yard" && <button className="btn btn-quiet btn-sm" onClick={() => setLabels(true)}><QrCode size={15} />QR labels</button>}
-          {tab === "yard" && ctx.edit("blocks") && <button className="btn btn-primary btn-sm" onClick={() => setAddNew(true)}><Plus size={15} />Block arrived</button>}
-          {tab === "damage" && ctx.edit("processing") && <button className="btn btn-primary btn-sm" onClick={() => setDmg("new")}><AlertTriangle size={14} />Record damage</button>}
+      <ProcessChain tab={tab} setTab={setTab} allowed={allowed} stages={[
+        { key: "yard", title: "Block yard", count: yard.length, unit: "blocks",
+          sub: `${transit.length} on the road · ${waiting.length} waiting`,
+          todo: transit.length ? { text: `${transit.length} to receive at the gate`, go: "yard" } : waiting.length ? { text: `${waiting.length} ready for the saw`, go: "yard" } : undefined },
+        { key: "sawing", title: "Sawing", count: onSaw.length, unit: "on the saw",
+          sub: `${jobsMonth.length} blocks sawn in 30 days`,
+          todo: onSaw.length ? { text: `${onSaw.length} to record slabs out`, go: "sawing" } : undefined },
+        { key: "slabs", title: "Slabs", count: slabsInStock, unit: "in stock",
+          sub: `${n0(jobsMonth.reduce((a, j) => a + j.sqft, 0))} sq ft cut in 30 days`,
+          todo: unitLots.length ? { text: `${unitLots.length} lots at the unit to send on`, go: "lots" } : undefined },
+      ]} links={["Load on saw", "Slabs out"]} filters={[
+        { key: "lots", label: "Lots at unit", count: unitLots.length },
+        { key: "damage", label: "Damage & loss", count: db.damages.length, warn: true },
+      ]} actions={<>
+        {tab === "yard" && <button className="btn btn-quiet btn-sm" onClick={() => setLabels(true)}><QrCode size={15} />QR labels</button>}
+        {tab === "yard" && ctx.edit("blocks") && <button className="btn btn-primary btn-sm" onClick={() => setAddNew(true)}><Plus size={15} />Block arrived</button>}
+        {tab === "damage" && ctx.edit("processing") && <button className="btn btn-primary btn-sm" onClick={() => setDmg("new")}><AlertTriangle size={14} />Record damage</button>}
+      </>} />
+
+      {tab === "sawing" && onSaw.length > 0 && (
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {onSaw.map((b) => (
+            <div key={b.id} className="flex items-center gap-3 rounded-2xl bg-accent-soft px-4 py-3">
+              <Scissors size={16} className="shrink-0 text-accent" />
+              <div className="min-w-0 flex-1"><div className="font-medium">{b.no} is on the saw</div><div className="text-[0.82rem] text-ink-2">{b.variety} · {n2(b.tonnes || b.billedTonnes)} t</div></div>
+              {ctx.edit("processing") && <button className="btn btn-primary btn-sm" onClick={() => setSaw(b)}>Slabs out</button>}
+            </div>
+          ))}
         </div>
-      </div>
+      )}
 
       <div className="mt-4">
         {tab === "yard" && <Table rows={yard} cols={yardCols} onRow={setEdit} search={(b) => `${b.no} ${b.variety} ${b.vehicleNo}`} empty="No blocks in the yard. Blocks dispatched from mines show up here." />}
@@ -124,7 +145,7 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
       {labels && <QrLabels ctx={ctx} blocks={yard} onClose={() => setLabels(false)} />}
       {edit && <BlockForm costs={C} db={db} initial={edit} mode="edit" onTransfer={ctx.firms.length > 1 && ctx.edit("blocks") ? () => { setSend({ item: edit, kind: "block" }); setEdit(null); } : undefined} onClose={() => setEdit(null)} onSave={(b) => { putBlock(b); setEdit(null); }} onDelete={(id) => { update((d) => { d.blocks = d.blocks.filter((x) => x.id !== id); }); setEdit(null); }} />}
       {addNew && <BlockForm costs={C} db={db} initial={null} mode="receive" onClose={() => setAddNew(false)} onSave={(b) => { putBlock(b); setAddNew(false); }} />}
-      {receive && <ReceiveForm block={receive} density={db.settings.density} onClose={() => setReceive(null)} onSave={(b, damaged) => { putBlock(b); setReceive(null); if (damaged) { setTab("damage"); setDmg("new"); } }} />}
+      {receive && <ReceiveForm ctx={ctx} block={receive} density={db.settings.density} onClose={() => setReceive(null)} onSave={(b, damaged) => { putBlock(b); setReceive(null); if (damaged) { setTab("damage"); setDmg("new"); } }} />}
       {send && <TransferForm ctx={ctx} item={send.item} kind={send.kind} onClose={() => setSend(null)} />}
       {saw && <SawForm ctx={ctx} block={saw} onClose={() => setSaw(null)} onDone={() => { setSaw(null); setTab("slabs"); }} />}
       {dmg && <DamageForm ctx={ctx} initial={dmg === "new" ? null : dmg} onClose={() => setDmg(null)} />}
@@ -135,7 +156,7 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
 
 const pendingMachine: Record<string, string> = {};
 
-function ReceiveForm({ block, density, onSave, onClose }: { block: Block; density: number; onSave: (b: Block, damaged: boolean) => void; onClose: () => void }) {
+function ReceiveForm({ ctx, block, density, onSave, onClose }: { ctx: Ctx; block: Block; density: number; onSave: (b: Block, damaged: boolean) => void; onClose: () => void }) {
   const [b, setB] = useState<Block>({ ...block, receivedOn: today() });
   const [damaged, setDamaged] = useState(false);
   const set = <K extends keyof Block>(k: K, v: Block[K]) => setB((x) => ({ ...x, [k]: v }));
@@ -147,11 +168,12 @@ function ReceiveForm({ block, density, onSave, onClose }: { block: Block; densit
         <button className="btn btn-quiet" onClick={onClose}>Cancel</button>
       </>}>
       <Section title="Weighbridge">
-        <Grid cols={3}>
+        <WeighCapture ctx={ctx} block={b} onChange={(p) => setB((x) => ({ ...x, ...p }))} />
+        <div className="mt-4"><Grid cols={3}>
           <F label="Net weight at gate"><NumIn value={b.tonnes} onChange={(v) => set("tonnes", v)} suffix="t" /></F>
           <F label="Billed / rawanna"><NumIn value={b.billedTonnes} onChange={(v) => set("billedTonnes", v)} suffix="t" /></F>
           <F label="Slip no."><TextIn value={b.weighSlip} onChange={(v) => set("weighSlip", v)} upper /></F>
-        </Grid>
+        </Grid></div>
         {gap > 0.02 && <div className="mt-3"><Note tone="warn">{(gap * 100).toFixed(1)}% short of the bill: {n2(b.billedTonnes - b.tonnes)} t, about {rs((b.billedTonnes - b.tonnes) * b.rate)}.</Note></div>}
       </Section>
       <Section title="Measured size">
@@ -507,5 +529,57 @@ function MoveForm({ lot, onSave, onClose }: { lot: SlabLot; onSave: (freight: nu
         <F label="Depot rack / A-frame"><TextIn value={loc} onChange={setLoc} /></F>
       </Grid>
     </Drawer>
+  );
+}
+
+type Stage = { key: Tab; title: string; count: number; unit: string; sub: string; todo?: { text: string; go: Tab } };
+
+/** The unit as a chain: each stage feeds the next, and each card says what is waiting to be done. */
+function ProcessChain({ tab, setTab, allowed, stages, links, filters, actions }: {
+  tab: Tab; setTab: (t: Tab) => void; allowed: Tab[]; stages: Stage[]; links: string[];
+  filters: { key: Tab; label: string; count: number; warn?: boolean }[]; actions: React.ReactNode;
+}) {
+  const shown = stages.filter((s) => allowed.includes(s.key));
+  const active = (k: Tab) => tab === k || (k === "slabs" && tab === "lots");
+  return (
+    <div className="mt-8">
+      <ol className="flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-0">
+        {shown.map((s, i) => {
+          const on = active(s.key);
+          const idx = stages.findIndex((x) => x.key === s.key);
+          return (
+            <li key={s.key} className="flex flex-col lg:flex-1 lg:flex-row lg:items-stretch">
+              <button type="button" onClick={() => setTab(s.key)} aria-current={on ? "step" : undefined}
+                className={`focusable group relative flex-1 rounded-2xl p-4 text-left transition-all ${on ? "bg-accent text-accent-ink shadow-lg shadow-black/5" : "bg-surface hover:-translate-y-0.5 hover:shadow-md"}`}>
+                <div className="flex items-center gap-2">
+                  <span className={`num grid h-6 w-6 place-items-center rounded-full text-[0.75rem] font-semibold ${on ? "bg-accent-ink/20" : "bg-surface-2 text-ink-2"}`}>{idx + 1}</span>
+                  <span className="font-semibold">{s.title}</span>
+                </div>
+                <div className="mt-3 flex items-baseline gap-1.5"><span className="num text-[1.9rem] font-semibold leading-none tracking-tight">{n0(s.count)}</span><span className={`text-[0.84rem] ${on ? "opacity-80" : "text-ink-3"}`}>{s.unit}</span></div>
+                <div className={`mt-1 text-[0.8rem] ${on ? "opacity-80" : "text-ink-3"}`}>{s.sub}</div>
+                <div className={`mt-3 flex items-center gap-1.5 text-[0.8rem] font-medium ${s.todo ? (on ? "" : "text-warn") : on ? "opacity-80" : "text-accent"}`}>
+                  {s.todo ? <><span className={`h-2 w-2 rounded-full ${on ? "bg-accent-ink" : "bg-warn"} animate-pulse`} />{s.todo.text}</> : <><Check size={14} />All caught up</>}
+                </div>
+              </button>
+              {i < shown.length - 1 && (
+                <div className="flex items-center justify-center py-1 lg:w-24 lg:flex-col lg:py-0" aria-hidden>
+                  <span className="text-[0.72rem] font-medium uppercase tracking-wide text-ink-3 lg:mb-1">{links[idx]}</span>
+                  <ChevronRight size={20} className="ml-1 rotate-90 text-accent lg:ml-0 lg:rotate-0" />
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <span className="text-[0.82rem] text-ink-3">Also show</span>
+        {filters.filter((f) => allowed.includes(f.key)).map((f) => (
+          <button key={f.key} type="button" className="chip" data-on={tab === f.key} onClick={() => setTab(tab === f.key ? (f.key === "lots" ? "slabs" : "yard") : f.key)}>
+            {f.label}<span className={`num ml-1.5 ${f.warn && f.count ? "text-warn" : "opacity-70"}`}>{f.count}</span>
+          </button>
+        ))}
+        <div className="ml-auto flex flex-wrap gap-2">{actions}</div>
+      </div>
+    </div>
   );
 }
