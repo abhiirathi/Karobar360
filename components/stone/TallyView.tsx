@@ -122,7 +122,7 @@ function Export({ ctx, T, setCfg }: { ctx: Ctx; T: TallySettings; setCfg: (p: Pa
   const nSales = db.sales.filter((s) => s.date >= from && s.date <= to).length;
   const nPurch = useMemo(() => purchasesOf(db, r).length, [db, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
   const tag = `${from}_to_${to}`;
-  const parties = db.parties.filter((p) => p.kind !== "transporter");
+  const parties = db.parties.filter((p) => p.kind === "customer" || p.kind === "supplier" || p.kind === "vendor");
   const [names, setNames] = useState<Record<string, string>>(T.partyNames);
   useEffect(() => setNames(T.partyNames), [T.partyNames]);
 
@@ -169,7 +169,7 @@ function Export({ ctx, T, setCfg }: { ctx: Ctx; T: TallySettings; setCfg: (p: Pa
         <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
           {parties.map((p) => (
             <label key={p.id} className="flex items-center gap-3 rounded-xl bg-surface px-3 py-2">
-              <span className="min-w-0 flex-1 truncate text-[0.9rem]">{p.company}<span className="block text-[0.76rem] text-ink-3">{p.kind === "customer" ? "Customer" : "Supplier"} · {p.city}</span></span>
+              <span className="min-w-0 flex-1 truncate text-[0.9rem]">{p.company}<span className="block text-[0.76rem] text-ink-3">{p.kind === "customer" ? "Customer" : p.kind === "vendor" ? "Vendor" : "Supplier"} · {p.city}</span></span>
               <input className="field !w-[48%]" placeholder="Same as here" value={names[p.id] ?? ""} onChange={(e) => setNames({ ...names, [p.id]: e.target.value })} />
             </label>
           ))}

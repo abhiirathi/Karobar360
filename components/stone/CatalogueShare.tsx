@@ -35,7 +35,7 @@ export default function CatalogueShare({ ctx, onClose }: { ctx: Ctx; onClose: ()
       {ctx.mode === "demo" && <div className="mb-4"><Note>The shareable page works in a company account. In the demo you can pick lots and add photos to see how it is set up.</Note></div>}
       <div className="rounded-2xl bg-surface p-4">
         <div className="text-[0.95rem]"><b>{lots.length}</b> lots are in the catalogue{noPhoto ? `, ${noPhoto} without photos` : ""}.</div>
-        <p className="mt-1 text-[0.84rem] text-ink-2">Open a lot in Slab stock to add photos and tick “Show in the dealer catalogue”. Sold-out lots drop off on their own.</p>
+        <p className="mt-1 text-[0.84rem] text-ink-2">Open a lot under Inventory → Slabs to add photos and tick “Show in the dealer catalogue”. Sold-out lots drop off on their own.</p>
       </div>
 
       {canSet ? (

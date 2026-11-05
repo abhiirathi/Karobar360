@@ -7,9 +7,9 @@ export const r2 = (n: number) => Math.round(n * 100) / 100;
 
 export const cbm = (b: Pick<Block, "l" | "w" | "h">) => (b.l * b.w * b.h) / 1e6;
 
-/** Purchase value of a block on its billing basis. */
+/** Purchase value of a block on its billing basis. Costing follows the weight received; the billed weight stands in until then. */
 export function purchaseValue(b: Block) {
-  const qty = b.rateBasis === "cbm" ? cbm(b) : b.billedTonnes || b.tonnes;
+  const qty = b.rateBasis === "cbm" ? cbm(b) : b.tonnes || b.billedTonnes;
   return b.rate * qty;
 }
 
@@ -51,31 +51,42 @@ export function theoreticalSlabs(hCm: number, thicknessMm: number, kerfMm = 5) {
 
 export const monthKey = (d: string) => d.slice(0, 7);
 
-export function mineMonth(db: StoneDB, mine: string | null, month: string) {
-  const costs = db.mineCosts.filter((c) => monthKey(c.date) === month && (!mine || c.mine === mine));
-  const blocks = db.blocks.filter((b) => b.source === "own_mine" && monthKey(b.date) === month && (!mine || b.mine === mine));
-  const total = costs.reduce((a, c) => a + c.amount, 0);
+/** Value of what the store issued to the quarry (to one mine, or to any own mine), at average purchase rate. */
+export function mineStoresIssued(db: StoneDB, mine: string | null, when: (d: string) => boolean) {
+  const st = db.stores;
+  if (!st) return 0;
+  const mines = new Set((mine ? [mine] : [...db.parties.filter((p) => p.kind === "mine").map((p) => p.company), ...(db.settings.ownMines ?? [])]).map((m) => m.toLowerCase()));
+  const avg = (id: string) => {
+    const ins = st.moves.filter((m) => m.itemId === id && m.kind === "in" && m.rate > 0);
+    const q = ins.reduce((a, m) => a + m.qty, 0);
+    return q ? ins.reduce((a, m) => a + m.qty * m.rate, 0) / q : st.items.find((x) => x.id === id)?.rate ?? 0;
+  };
+  return st.moves.filter((m) => m.kind === "out" && mines.has((m.usedFor ?? "").toLowerCase()) && when(m.date)).reduce((a, m) => a + m.qty * avg(m.itemId), 0);
+}
+
+/** Quarry cost and output for the dates `when` accepts: cost entries plus store issues to the quarry. */
+function mineSpan(db: StoneDB, mine: string | null, when: (d: string) => boolean) {
+  const costs = db.mineCosts.filter((c) => when(c.date) && (!mine || c.mine === mine));
+  const blocks = db.blocks.filter((b) => b.source === "own_mine" && when(b.date) && (!mine || b.mine === mine));
+  const stores = mineStoresIssued(db, mine, when);
+  const total = costs.reduce((a, c) => a + c.amount, 0) + stores;
   const tonnes = blocks.reduce((a, b) => a + b.tonnes, 0);
   const vol = blocks.reduce((a, b) => a + cbm(b), 0);
   const byCat: Record<string, number> = {};
   for (const c of costs) byCat[c.cat] = (byCat[c.cat] ?? 0) + c.amount;
+  if (stores) byCat.stores = (byCat.stores ?? 0) + stores;
   const qty = (cat: string) => costs.filter((c) => c.cat === cat).reduce((a, c) => a + c.qty, 0);
   return { costs, blocks, total, tonnes, vol, perTonne: tonnes ? total / tonnes : 0, perCbm: vol ? total / vol : 0, byCat, qty };
+}
+
+export function mineMonth(db: StoneDB, mine: string | null, month: string) {
+  return mineSpan(db, mine, (d) => monthKey(d) === month);
 }
 
 /** Rolling window ending today: costs and own-quarry blocks in the last N days. */
 export function mineWindow(db: StoneDB, days: number, offset = 0) {
   const now = Date.now();
-  const inWin = (d: string) => { const a = (now - new Date(d).getTime()) / 86400000; return a >= offset && a < offset + days; };
-  const costs = db.mineCosts.filter((c) => inWin(c.date));
-  const blocks = db.blocks.filter((b) => b.source === "own_mine" && inWin(b.date));
-  const total = costs.reduce((a, c) => a + c.amount, 0);
-  const tonnes = blocks.reduce((a, b) => a + b.tonnes, 0);
-  const vol = blocks.reduce((a, b) => a + cbm(b), 0);
-  const byCat: Record<string, number> = {};
-  for (const c of costs) byCat[c.cat] = (byCat[c.cat] ?? 0) + c.amount;
-  const qty = (cat: string) => costs.filter((c) => c.cat === cat).reduce((a, c) => a + c.qty, 0);
-  return { costs, blocks, total, tonnes, vol, perTonne: tonnes ? total / tonnes : 0, perCbm: vol ? total / vol : 0, byCat, qty };
+  return mineSpan(db, null, (d) => { const a = (now - new Date(d).getTime()) / 86400000; return a >= offset && a < offset + days; });
 }
 
 export function months(db: StoneDB) {
@@ -142,14 +153,15 @@ export function saleTotals(s: Sale, sellerState: string, buyerState: string) {
   return { taxable, tax, cgst: inter ? 0 : tax / 2, sgst: inter ? 0 : tax / 2, igst: inter ? tax : 0, total: taxable + tax, inter };
 }
 
-export function saleCost(s: Sale, lots: SlabLot[], blocks: Block[] = []) {
+/** Cost of what an invoice sold. `rate` gives a lot's cost per sq ft; by default the lot's own cost. */
+export function saleCost(s: Sale, lots: SlabLot[], blocks: Block[] = [], rate: (l: SlabLot) => number = lotRate) {
   return s.lines.reduce((a, l) => {
     if (l.blockId) {
       const b = blocks.find((x) => x.id === l.blockId);
       return a + (b ? blockCost(b) : 0);
     }
     const lot = lots.find((x) => x.id === l.lotId);
-    return a + (lot ? lotRate(lot) * l.sqft : 0);
+    return a + (lot ? rate(lot) * l.sqft : 0);
   }, 0);
 }
 

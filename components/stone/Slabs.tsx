@@ -127,7 +127,7 @@ export default function SlabsView({ ctx }: { ctx: Ctx }) {
                 <td className="px-3 py-2 pr-4"><span>{r.lot.site === "depot" ? "Depot" : "Unit"}</span><span className="block text-[0.78rem] text-ink-3">{r.lot.location}</span></td>
               </tr>
             ))}
-            {!shown.length && <tr><td colSpan={9} className="px-4 py-10 text-center text-ink-3">{rows.length ? "No slabs match these filters." : "No slabs yet. When a block comes off the saw, record each slab under Processing unit → Block yard → Slabs out."}</td></tr>}
+            {!shown.length && <tr><td colSpan={9} className="px-4 py-10 text-center text-ink-3">{rows.length ? "No slabs match these filters." : "No slabs yet. When a block comes off the saw, record each slab under Manufacturing unit → Block yard → Slabs out."}</td></tr>}
           </tbody>
         </table>
       </div>

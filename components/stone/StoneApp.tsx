@@ -1,31 +1,33 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BookOpenCheck, Building2, Check, ChevronsUpDown, Globe, LifeBuoy, Factory, ReceiptText, Route, LayoutDashboard, LogOut, Mountain, Package, Settings, Ship, UserCog, Users, Warehouse } from "lucide-react";
+import { BookOpenCheck, Boxes, Building2, Check, ChevronDown, ChevronsUpDown, Globe, LifeBuoy, Factory, ReceiptText, LayoutDashboard, LogOut, Mountain, Package, Settings, ShoppingCart, UserCog, Users } from "lucide-react";
 import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useStone, type StoneMode } from "@/lib/stone/store";
 import { level, roleLabel, type AreaKey, type Level, type Me, type Perms } from "@/lib/stone/perm";
 import { hasBlocks, modulesOf } from "@/lib/stone/modules";
-import type { Firm, Modules, StoneDB } from "@/lib/stone/types";
+import type { Firm, Modules, PartyKind, StoneDB } from "@/lib/stone/types";
 import { firmsOf, kindLabel, scope, tagNew } from "@/lib/stone/firms";
 import Overview from "./Overview";
-import Mines from "./Mines";
+import Inventory from "./Inventory";
 import Unit from "./Unit";
 import Depot from "./Depot";
 import StoresView from "./Stores";
-import Trade from "./Trade";
+import Purchases from "./Purchases";
 import Parties from "./Parties";
 import SettingsView from "./SettingsView";
 import Team from "./Team";
 import TallyView from "./TallyView";
 import Scan from "./Scan";
 import Auth from "./Auth";
-import TraceView from "./Trace";
 import Help from "./Help";
 import Services from "./Services";
 
-export type View = "overview" | "mines" | "unit" | "stores" | "depot" | "sales" | "trade" | "parties" | "trace" | "tally" | "team" | "settings" | "services" | "help" | "scan";
+export type View = "overview" | "inventory" | "unit" | "stores" | "purchases" | "sales" | "parties" | "tally" | "team" | "settings" | "services" | "help" | "scan";
+
+/** Sections that were merged into others; old links still land in the right place. */
+const MOVED: Record<string, [View, string]> = { mines: ["inventory", "blocks"], depot: ["inventory", "slabs"], trade: ["purchases", "import"], trace: ["inventory", "blocks"] };
 export type Ctx = {
   db: StoneDB;
   update: (fn: (d: StoneDB) => void) => void;
@@ -48,20 +50,35 @@ export type Ctx = {
   setFirm: (id: string | null) => void;
 };
 
-type NavItem = { key: View; label: string; icon: typeof Mountain; show: boolean };
+export type NavChild = { sub: string; label: string; show: boolean };
+type NavItem = { key: View; label: string; icon: typeof Mountain; show: boolean; children?: NavChild[] };
+
+/** Masters each kind of business keeps. A quarry keeps its own mines; buyers keep suppliers and qualities. */
+export function masterKinds(mods: Modules): NavChild[] {
+  const buys = mods.buyBlocks || mods.imports || mods.processing || mods.trading || mods.depot;
+  return [
+    { sub: "customer", label: "Customers", show: true },
+    { sub: "supplier", label: "Suppliers", show: buys },
+    { sub: "vendor", label: "Vendors", show: true },
+    { sub: "transporter", label: "Transporters", show: true },
+    { sub: "quality", label: "Quality", show: buys },
+    { sub: "mine", label: "Mines", show: mods.quarry },
+  ];
+}
 
 export function navFor(mods: Modules, can: (a: AreaKey) => Level, perms: Perms): NavItem[] {
   const v = (a: AreaKey) => can(a) !== "none";
+  const blocksOn = (hasBlocks(mods) && (v("blocks") || v("processing"))) || (mods.quarry && v("quarry"));
+  const slabsOn = (mods.depot || mods.trading || mods.processing || mods.imports) && (v("stock") || v("processing") || v("sales"));
+  const buyOn = ((mods.buyBlocks || mods.imports || mods.processing) && v("blocks")) || ((mods.trading || mods.depot) && v("stock"));
   return [
     { key: "overview", label: "Overview", icon: LayoutDashboard, show: true },
-    { key: "mines", label: mods.quarry ? "Mines" : "Blocks", icon: Mountain, show: (mods.quarry && v("quarry")) || ((mods.buyBlocks || mods.imports) && v("blocks")) },
-    { key: "unit", label: "Processing unit", icon: Factory, show: mods.processing && (v("blocks") || v("processing")) },
+    { key: "inventory", label: "Inventory", icon: Boxes, show: blocksOn || slabsOn, children: [{ sub: "blocks", label: "Blocks", show: blocksOn }, { sub: "slabs", label: "Slabs", show: slabsOn }] },
+    { key: "unit", label: "Manufacturing unit", icon: Factory, show: mods.processing && (v("blocks") || v("processing")) },
     { key: "stores", label: "Stores", icon: Package, show: mods.stores && v("stores") },
-    { key: "depot", label: "Slab stock", icon: Warehouse, show: (mods.depot || mods.trading || mods.processing || mods.imports) && (v("stock") || v("sales")) },
-    { key: "sales", label: "Sales and invoices", icon: ReceiptText, show: v("sales") },
-    { key: "trade", label: "Import and export", icon: Ship, show: (mods.imports || mods.exports) && v("trade") },
-    { key: "parties", label: "Customers and suppliers", icon: Users, show: v("parties") },
-    { key: "trace", label: "Trace a block", icon: Route, show: v("blocks") || v("stock") || v("processing") || v("sales") },
+    { key: "purchases", label: "Purchases", icon: ShoppingCart, show: buyOn },
+    { key: "sales", label: "Sales", icon: ReceiptText, show: v("sales") },
+    { key: "parties", label: "Masters", icon: Users, show: v("parties"), children: masterKinds(mods) },
     { key: "tally", label: "Tally", icon: BookOpenCheck, show: v("tally") },
     { key: "team", label: "Team", icon: UserCog, show: perms.team },
     { key: "settings", label: "Settings", icon: Settings, show: v("settings") },
@@ -73,19 +90,25 @@ export function navFor(mods: Modules, can: (a: AreaKey) => Level, perms: Perms):
 export default function StoneApp({ mode, initialView, initialSub }: { mode: StoneMode; initialView?: View; initialSub?: string }) {
   const store = useStone(mode);
   const { db, update, reset, replace, saveError, saving, status, me, perms, notice, say, signOut, reload } = store;
-  const [view, setView] = useState<View>(initialView ?? "overview");
-  const [sub, setSub] = useState(initialSub ?? "");
+  const [view, setView] = useState<View>(MOVED[initialView ?? ""]?.[0] ?? initialView ?? "overview");
+  const [sub, setSub] = useState(MOVED[initialView ?? ""]?.[1] ?? initialSub ?? "");
+  const [openNav, setOpenNav] = useState<Set<View>>(new Set());
 
   useEffect(() => {
     if (initialView) return;
     const p = new URLSearchParams(window.location.search);
-    const v = p.get("v") as View | null;
-    if (v) setView(v);
+    const v = p.get("v");
+    if (v && MOVED[v]) { setView(MOVED[v][0]); setSub(MOVED[v][1]); return; }
+    if (v) setView(v as View);
     setSub(p.get("t") ?? "");
   }, [initialView]);
 
   const base = mode === "demo" ? "/stone/demo" : "/stone";
+  // Bumped on every navigation so a sidebar click leaves an open full-page form
+  const [navN, setNavN] = useState(0);
   const go = (v: View, t = "") => {
+    setNavN((n) => n + 1);
+    setOpenNav((o) => (o.has(v) ? o : new Set([...o, v])));
     setView(v);
     setSub(t);
     const p = new URLSearchParams();
@@ -130,6 +153,10 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
   const allowed = view === "scan" || nav.some((n) => n.key === view);
   const shown: View = allowed ? view : "overview";
   const current = nav.find((n) => n.key === shown);
+  const kids = (n: NavItem) => (n.children ?? []).filter((c) => c.show);
+  // A section with sub-items shows the one asked for, else its first; inner tabs (Extraction costs) belong to Blocks.
+  const child = current?.children ? kids(current).find((c) => c.sub === sub) ?? (current.key === "inventory" && ["costs", "pertonne"].includes(sub) ? kids(current).find((c) => c.sub === "blocks") : undefined) ?? kids(current)[0] : undefined;
+  const childSub = child?.sub ?? "";
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[272px_minmax(0,1fr)]">
@@ -156,6 +183,29 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
           {nav.map((n) => {
             const on = n.key === shown;
             const I = n.icon;
+            const cs = kids(n);
+            if (n.children) {
+              const expanded = openNav.has(n.key) || on;
+              return (
+                <div key={n.key} className="flex shrink-0 gap-1 lg:flex-col">
+                  <button onClick={() => { if (!on) go(n.key, cs[0]?.sub ?? ""); else setOpenNav((o) => { const x = new Set(o); if (expanded) x.delete(n.key); else x.add(n.key); return x; }); }} aria-expanded={expanded}
+                    className={`focusable flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[0.92rem] transition-colors lg:py-2.5 ${on ? "bg-surface-2 text-ink" : "text-ink-2 hover:bg-surface-2 hover:text-ink"}`}>
+                    <I size={17} strokeWidth={1.9} className="shrink-0" />
+                    <span className="whitespace-nowrap font-medium">{n.label}</span>
+                    <ChevronDown size={15} className={`ml-auto shrink-0 text-ink-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
+                  </button>
+                  {expanded && cs.map((c) => {
+                    const cOn = on && c.sub === childSub;
+                    return (
+                      <button key={c.sub} onClick={() => go(n.key, c.sub)} aria-current={cOn ? "page" : undefined}
+                        className={`focusable flex shrink-0 items-center rounded-xl px-3 py-2 text-left text-[0.88rem] transition-colors lg:ml-6 ${cOn ? "bg-accent text-accent-ink" : "text-ink-2 hover:bg-surface-2 hover:text-ink"}`}>
+                        <span className="whitespace-nowrap font-medium">{c.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            }
             return (
               <button key={n.key} onClick={() => go(n.key)} aria-current={on ? "page" : undefined}
                 className={`focusable flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[0.92rem] transition-colors lg:py-2.5 ${on ? "bg-accent text-accent-ink" : "text-ink-2 hover:bg-surface-2 hover:text-ink"}`}>
@@ -187,20 +237,18 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
         )}
         {shown !== "overview" && shown !== "scan" && current && (
           <div className="no-print mb-6 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h1 className="text-[1.75rem] font-semibold tracking-tight sm:text-[2rem]">{current.label}</h1>
+            <h1 className="text-[1.75rem] font-semibold tracking-tight sm:text-[2rem]">{child ? <><span className="text-ink-3">{current.label} · </span>{child.label}</> : current.label}</h1>
             {saving && <span className="text-sm text-ink-3">Saving…</span>}
           </div>
         )}
         {saveError && mode === "demo" && <div className="no-print mb-4 rounded-full bg-neg-soft px-3 py-1 text-sm text-neg">Browser storage is full. Remove photos or export a backup.</div>}
         {shown === "overview" && <Overview ctx={ctx} />}
-        {shown === "mines" && <Mines ctx={ctx} />}
+        {shown === "inventory" && <Inventory ctx={ctx} page={childSub === "slabs" ? "slabs" : "blocks"} key={sub || childSub} />}
         {shown === "unit" && <Unit ctx={ctx} />}
         {shown === "stores" && <StoresView ctx={ctx} />}
-        {shown === "depot" && <Depot ctx={ctx} page="stock" />}
-        {shown === "sales" && <Depot ctx={ctx} page="sales" key="sales" />}
-        {shown === "trade" && <Trade ctx={ctx} />}
-        {shown === "parties" && <Parties ctx={ctx} />}
-        {shown === "trace" && <TraceView ctx={ctx} />}
+        {shown === "purchases" && <Purchases ctx={ctx} key={navN} />}
+        {shown === "sales" && <Depot ctx={ctx} key={navN} />}
+        {shown === "parties" && <Parties ctx={ctx} kind={(childSub || "customer") as PartyKind} key={childSub} />}
         {shown === "tally" && <TallyView ctx={ctx} />}
         {shown === "team" && <Team ctx={ctx} />}
         {shown === "settings" && <SettingsView ctx={ctx} />}

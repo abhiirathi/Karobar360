@@ -79,7 +79,7 @@ export default function Scan({ ctx, blockId }: { ctx: Ctx; blockId: string }) {
           </label>
         )}
         {!canGate && !canSaw && <Note>You can view this block. Ask your owner for edit access to update it.</Note>}
-        <button className="btn btn-quiet w-full justify-center" onClick={() => go(ctx.mods.processing ? "unit" : "mines", ctx.mods.processing ? "yard" : "bought")}>Open the block register</button>
+        <button className="btn btn-quiet w-full justify-center" onClick={() => go("inventory", "blocks")}>Open block inventory</button>
       </div>
     </div>
   );

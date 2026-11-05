@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { ArrowDownToLine, ArrowUpFromLine, Plus, Trash2 } from "lucide-react";
 import { dmy, lakh, n0, n2, rs, today, uid } from "@/lib/stone/calc";
 import { STORE_CATS, avgRate, catLabel, daysLeft, onHand, storesOf, used } from "@/lib/stone/stores";
+import { ownMines } from "@/lib/stone/costing";
 import type { StoreCat, StoreItem, StoreMove, Stores } from "@/lib/stone/types";
 import type { Ctx } from "./StoneApp";
 import { Badge, Drawer, F, Grid, Note, NumIn, Section, Sel, Seg, Stat, Table, TextIn, type Col } from "./ui";
@@ -28,11 +29,11 @@ export default function StoresView({ ctx }: { ctx: Ctx }) {
   const out30Val = out30.reduce((a, m) => { const it = S.items.find((x) => x.id === m.itemId); return a + m.qty * (it ? avgRate(S, it) : 0); }, 0);
   const sqft30 = db.jobs.filter((j) => j.finishedOn && Date.now() - new Date(j.finishedOn).getTime() < 30 * 864e5).reduce((a, j) => a + j.sqft, 0);
   const epoxy30 = out30.filter((m) => ["epoxy", "resin"].includes(S.items.find((x) => x.id === m.itemId)?.cat ?? "")).reduce((a, m) => { const it = S.items.find((x) => x.id === m.itemId)!; return a + m.qty * avgRate(S, it); }, 0);
-  const sup = (id?: string) => db.parties.find((p) => p.id === id)?.company;
+  const sup = (id?: string) => ctx.root.parties.find((p) => p.id === id)?.company;
   const cats = STORE_CATS.filter((c) => S.items.some((i) => i.cat === c.key));
 
   const cols: Col<(typeof rows)[number]>[] = [
-    { key: "n", label: "Item", render: (r) => <div><div className="font-medium">{r.name}</div><div className="text-[0.8rem] text-ink-3">{catLabel(r.cat)}{r.location ? ` · ${r.location}` : ""}</div></div>, sort: (r) => r.name },
+    { key: "n", label: "Item", render: (r) => <div><div className="font-medium">{r.name}</div><div className="text-[0.8rem] text-ink-3">{catLabel(r.cat)}{r.location ? ` · ${r.location}` : ""}{sup(r.vendorId) ? ` · ${sup(r.vendorId)}` : ""}</div></div>, sort: (r) => r.name },
     { key: "h", label: "In stock", align: "right", render: (r) => <span className={r.have <= r.minQty && r.minQty > 0 ? "font-semibold text-neg" : "font-medium"}>{n2(r.have)} {r.unit}</span>, sort: (r) => r.have },
     { key: "m", label: "Reorder at", align: "right", render: (r) => r.minQty ? `${n2(r.minQty)} ${r.unit}` : <span className="text-ink-3">—</span> },
     { key: "d", label: "Lasts", align: "right", render: (r) => (isFinite(r.left) ? <span className={r.left < 10 ? "text-warn" : ""}>{n0(r.left)} days</span> : <span className="text-ink-3">—</span>), sort: (r) => (isFinite(r.left) ? r.left : 9999) },
@@ -73,7 +74,7 @@ export default function StoresView({ ctx }: { ctx: Ctx }) {
         </div>
       )}
       <div className="mt-4">
-        {tab === "stock" && <Table rows={shown} cols={cols} onRow={(r) => setItem(S.items.find((x) => x.id === r.id)!)} search={(r) => `${r.name} ${catLabel(r.cat)} ${r.location}`} empty="No items yet. Add epoxy, resin, polishing powder, abrasives, blades and spares you keep in the store." initialSort={{ key: "h", dir: 1 }} />}
+        {tab === "stock" && <Table rows={shown} cols={cols} onRow={(r) => setItem(S.items.find((x) => x.id === r.id)!)} search={(r) => `${r.name} ${catLabel(r.cat)} ${r.location} ${sup(r.vendorId) ?? ""}`} empty="No items yet. Add epoxy, resin, polishing powder, abrasives, blades and spares you keep in the store." initialSort={{ key: "h", dir: 1 }} />}
         {tab === "log" && <Table rows={[...S.moves].reverse()} cols={logCols} search={(m) => `${S.items.find((x) => x.id === m.itemId)?.name} ${m.usedFor} ${m.billNo} ${m.note}`} empty="Nothing received or issued yet." />}
       </div>
 
@@ -93,6 +94,7 @@ function ItemForm({ ctx, S, item, onClose }: { ctx: Ctx; S: Stores; item: StoreI
   const [count, setCount] = useState<number>(have);
   const [opening, setOpening] = useState(0);
   const can = ctx.edit("stores");
+  const vendors = ctx.db.parties.filter((p) => p.kind === "vendor");
   const set = <K extends keyof StoreItem>(k: K, v: StoreItem[K]) => setIt({ ...it, [k]: v });
   const save = () => {
     const id = it.id || uid();
@@ -114,6 +116,7 @@ function ItemForm({ ctx, S, item, onClose }: { ctx: Ctx; S: Stores; item: StoreI
         <F label="Unit"><Sel value={it.unit} onChange={(v) => set("unit", v)} options={["kg", "g", "L", "pcs", "set", "m", "sq m", "box", "drum", "bag", "roll"].map((v) => ({ v, l: v }))} /></F>
         <F label="Reorder when stock falls to" hint="0 means no reminder"><NumIn value={it.minQty} onChange={(v) => set("minQty", v)} suffix={it.unit} /></F>
         {ctx.costs && <F label="Usual rate"><NumIn value={it.rate} onChange={(v) => set("rate", v)} suffix={`₹/${it.unit}`} /></F>}
+        <F label="Vendor" span={2} hint={!vendors.length ? "Add vendors under Masters → Vendors" : undefined}><Sel value={it.vendorId ?? ""} onChange={(v) => set("vendorId", v)} placeholder="Choose vendor" options={vendors.map((p) => ({ v: p.id, l: `${p.company}${p.city ? ` · ${p.city}` : ""}` }))} /></F>
         <F label="Kept at"><TextIn value={it.location} onChange={(v) => set("location", v)} placeholder="Store room, shelf 2" /></F>
         {!item && <F label="Opening stock"><NumIn value={opening} onChange={setOpening} suffix={it.unit} /></F>}
         {item && <F label="Physical count" hint="Change this after counting; the difference is logged"><NumIn value={count} onChange={setCount} suffix={it.unit} /></F>}
@@ -124,7 +127,7 @@ function ItemForm({ ctx, S, item, onClose }: { ctx: Ctx; S: Stores; item: StoreI
 }
 
 function ReceiveForm({ ctx, S, onClose }: { ctx: Ctx; S: Stores; onClose: () => void }) {
-  const suppliers = ctx.db.parties.filter((p) => p.kind === "supplier");
+  const vendors = ctx.db.parties.filter((p) => p.kind === "vendor");
   const [h, setH] = useState({ supplierId: "", billNo: "", date: today(), gstRate: 18 });
   const [lines, setLines] = useState<{ itemId: string; qty: number; rate: number }[]>([]);
   const total = lines.reduce((a, l) => a + l.qty * l.rate, 0);
@@ -141,17 +144,17 @@ function ReceiveForm({ ctx, S, onClose }: { ctx: Ctx; S: Stores; onClose: () => 
     onClose();
   };
   return (
-    <Drawer open wide title="Received into store" sub="One supplier bill, one or more items." onClose={onClose}
+    <Drawer open wide title="Received into store" sub="One vendor bill, one or more items." onClose={onClose}
       footer={<><button className="btn btn-primary" disabled={Boolean(err)} onClick={save}>Save</button><button className="btn btn-quiet" onClick={onClose}>Cancel</button>{err && <span className="text-sm text-ink-3">{err}</span>}</>}>
       <Section title="Bill">
         <Grid cols={3}>
-          <F label="Supplier" span={2}><Sel value={h.supplierId} onChange={(v) => setH({ ...h, supplierId: v })} placeholder="Choose supplier (optional)" options={suppliers.map((p) => ({ v: p.id, l: `${p.company} · ${p.city}` }))} /></F>
+          <F label="Vendor" span={2}><Sel value={h.supplierId} onChange={(v) => setH({ ...h, supplierId: v })} placeholder="Choose vendor (optional)" options={vendors.map((p) => ({ v: p.id, l: `${p.company} · ${p.city}` }))} /></F>
           <F label="Bill no."><TextIn value={h.billNo} onChange={(v) => setH({ ...h, billNo: v })} upper /></F>
           <F label="Date"><TextIn type="date" value={h.date} onChange={(v) => setH({ ...h, date: v })} /></F>
           {ctx.costs && <F label="GST on bill"><NumIn value={h.gstRate} onChange={(v) => setH({ ...h, gstRate: v })} suffix="%" /></F>}
         </Grid>
       </Section>
-      <Section title="Items" aside={<Sel value="" onChange={(id) => { const it = S.items.find((x) => x.id === id); if (it) setLines([...lines, { itemId: id, qty: 0, rate: it.rate }]); }} placeholder="+ Add item" options={S.items.filter((i) => !lines.some((l) => l.itemId === i.id)).map((i) => ({ v: i.id, l: `${i.name} (${i.unit})` }))} />}>
+      <Section title="Items" aside={<Sel value="" onChange={(id) => { const it = S.items.find((x) => x.id === id); if (it) { setLines([...lines, { itemId: id, qty: 0, rate: it.rate }]); if (!h.supplierId && it.vendorId) setH({ ...h, supplierId: it.vendorId }); } }} placeholder="+ Add item" options={S.items.filter((i) => !lines.some((l) => l.itemId === i.id)).map((i) => ({ v: i.id, l: `${i.name} (${i.unit})` }))} />}>
         {!S.items.length && <Note>Add items to the store first with “New item”.</Note>}
         <div className="space-y-2">
           {lines.map((l, i) => {
@@ -180,7 +183,7 @@ function IssueForm({ ctx, S, item, onClose }: { ctx: Ctx; S: Stores; item: Store
   const [note, setNote] = useState("");
   const it = S.items.find((x) => x.id === itemId);
   const have = it ? onHand(S, it.id) : 0;
-  const places = [...ctx.db.settings.machines, "Epoxy line", "Polishing line", "Cutter", ...ctx.db.settings.ownMines, "Loader / crane", "General"];
+  const places = [...ctx.db.settings.machines, "Epoxy line", "Polishing line", "Cutter", ...ownMines(ctx.db), "Loader / crane", "General"];
   const save = () => {
     put(ctx, (s) => { s.moves.push({ id: uid(), itemId, date, kind: "out", qty, rate: 0, usedFor, note }); });
     ctx.say(`Issued ${n2(qty)} ${it?.unit ?? ""} ${it?.name ?? ""}`, "good");
@@ -193,7 +196,7 @@ function IssueForm({ ctx, S, item, onClose }: { ctx: Ctx; S: Stores; item: Store
         <F label="Item" span={2}><Sel value={itemId} onChange={setItemId} placeholder="Choose item" options={S.items.map((i) => ({ v: i.id, l: `${i.name} · ${n2(onHand(S, i.id))} ${i.unit}` }))} /></F>
         <F label="Quantity" err={it && qty > have ? `Only ${n2(have)} ${it.unit} in stock` : undefined}><NumIn value={qty} onChange={setQty} suffix={it?.unit} /></F>
         <F label="Date"><TextIn type="date" value={date} onChange={setDate} /></F>
-        <F label="Used for" span={2}><TextIn value={usedFor} onChange={setUsedFor} list="store-places" /><datalist id="store-places">{[...new Set(places)].map((p) => <option key={p} value={p} />)}</datalist></F>
+        <F label="Used for" span={2} hint={ownMines(ctx.db).some((m) => m.toLowerCase() === usedFor.trim().toLowerCase()) ? "Issued to a mine: added to that mine’s extraction cost" : "Spread over the sq ft cut this month"}><TextIn value={usedFor} onChange={setUsedFor} list="store-places" /><datalist id="store-places">{[...new Set(places)].map((p) => <option key={p} value={p} />)}</datalist></F>
         <F label="Note" span={2}><TextIn value={note} onChange={setNote} placeholder="Block or lot no., shift, person" /></F>
       </Grid>
     </Drawer>

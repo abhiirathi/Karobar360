@@ -26,13 +26,13 @@ export interface Me {
 
 export const AREAS: { key: AreaKey; label: string; hint: string }[] = [
   { key: "quarry", label: "Quarry", hint: "Own quarry blocks and running costs: diesel, wire, labour" },
-  { key: "blocks", label: "Block arrivals", hint: "Register blocks, gate receiving, weighbridge, photos, QR labels" },
+  { key: "blocks", label: "Blocks and purchases", hint: "Block purchases, gate receiving, weighbridge, photos, QR labels" },
   { key: "processing", label: "Sawing and processing", hint: "Load on saw, slabs out, trolley damage" },
   { key: "stores", label: "Stores", hint: "Epoxy, resin, polish, abrasives, blades, spares: receive and issue" },
-  { key: "stock", label: "Slab stock", hint: "Lots at unit and depot, racks, catalogue photos" },
-  { key: "sales", label: "Sales and invoices", hint: "Invoices, payments, e-invoice and e-way bill" },
+  { key: "stock", label: "Slab inventory", hint: "Lots at unit and depot, racks, catalogue photos, slab purchases" },
+  { key: "sales", label: "Sales", hint: "Invoices, payments, e-invoice and e-way bill" },
   { key: "trade", label: "Import and export", hint: "Shipments, bill of lading, landed cost" },
-  { key: "parties", label: "Customers and suppliers", hint: "Names, GSTIN, addresses, credit" },
+  { key: "parties", label: "Masters", hint: "Customers, suppliers, vendors, transporters, qualities, mines" },
   { key: "tally", label: "Tally", hint: "Figures from Tally, and export to Tally" },
   { key: "settings", label: "Company settings", hint: "Rates, royalty, invoice format, catalogue" },
 ];
@@ -117,7 +117,7 @@ export function sectionAccess(p: Perms): { read: Set<Section>; write: Set<Sectio
 
 /** Money fields hidden from people who may not see costs. */
 export const COST_FIELDS: Partial<Record<Section, string[]>> = {
-  blocks: ["rate", "royalty", "dmft", "freight", "loading", "otherCost", "importCost", "damageAlloc"],
+  blocks: ["rate", "royalty", "dmft", "freight", "loading", "otherCost", "importCost", "damageAlloc", "imp"],
   lots: ["cost"],
   jobs: ["power", "blades", "resin", "netting", "polishing", "labour", "other"],
 };

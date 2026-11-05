@@ -1,35 +1,34 @@
 "use client";
 import { useMemo, useState } from "react";
-import { AlertTriangle, ArrowRight, Play, Plus, QrCode, Scissors } from "lucide-react";
-import { baseCost, blockCost, cbm, daysSince, dmy, jobCost, lotRate, n0, n2, perTonne, r2, rs, rs2, spreadDamage, theoreticalSlabs, today, uid, weightGap, damageNet, lakh } from "@/lib/stone/calc";
+import { AlertTriangle, Play, Plus, QrCode, Scissors } from "lucide-react";
+import { baseCost, blockCost, cbm, daysSince, dmy, jobCost, n0, n2, perTonne, r2, rs, rs2, spreadDamage, theoreticalSlabs, today, uid, weightGap, damageNet, lakh } from "@/lib/stone/calc";
 import type { Block, DamageEvent, SawJob, Slab, SlabLot } from "@/lib/stone/types";
-import { nextLotNo, slabArea, slabCount, slabNo, syncLot } from "@/lib/stone/slabs";
+import { nextLotNo, slabArea, slabNo, syncLot } from "@/lib/stone/slabs";
+import { lotCost, lotUnit } from "@/lib/stone/costing";
 import { firmOf } from "@/lib/stone/firms";
 import type { Ctx } from "./StoneApp";
 import BlockForm, { STATUS_LABEL } from "./BlockForm";
 import QrLabels from "./QrLabels";
 import TransferForm from "./Transfer";
-import SlabsView from "./Slabs";
 import { Badge, Drawer, F, Grid, Note, NumIn, Section, Sel, Seg, Stat, Table, TextIn, Area, type Col } from "./ui";
 
-type Tab = "yard" | "sawing" | "slabs" | "lots" | "damage";
+type Tab = "yard" | "sawing" | "damage";
 
+/** The factory floor: blocks in the yard go on the saw and come off as slabs. Stock itself lives under Inventory. */
 export default function Unit({ ctx }: { ctx: Ctx }) {
   const { db, update } = ctx;
   const gate = ctx.can("blocks") !== "none";
   const proc = ctx.can("processing") !== "none";
-  const allowed: Tab[] = [...(gate || proc ? (["yard"] as Tab[]) : []), ...(proc ? (["sawing", "slabs", "lots", "damage"] as Tab[]) : [])];
+  const allowed: Tab[] = [...(gate || proc ? (["yard"] as Tab[]) : []), ...(proc ? (["sawing", "damage"] as Tab[]) : [])];
   const [tabRaw, setTab] = useState<Tab>((ctx.sub as Tab) || "yard");
   const tab: Tab = allowed.includes(tabRaw) ? tabRaw : allowed[0] ?? "yard";
   const [labels, setLabels] = useState(false);
-  const [send, setSend] = useState<{ item: Block | SlabLot; kind: "block" | "lot" } | null>(null);
+  const [send, setSend] = useState<Block | null>(null);
   const C = ctx.costs;
   const [edit, setEdit] = useState<Block | null>(null);
   const [receive, setReceive] = useState<Block | null>(null);
   const [saw, setSaw] = useState<Block | null>(null);
   const [dmg, setDmg] = useState<DamageEvent | null | "new">(null);
-  const [move, setMove] = useState<SlabLot | null>(null);
-  const [addNew, setAddNew] = useState(false);
 
   const yard = db.blocks.filter((b) => ["in_transit", "in_yard", "on_saw"].includes(b.status));
   const inYard = yard.filter((b) => b.status !== "in_transit");
@@ -48,7 +47,7 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
   const allSqft = db.jobs.reduce((a, j) => a + j.sqft, 0);
   const allT = db.jobs.reduce((a, j) => a + (db.blocks.find((b) => b.id === j.blockId)?.tonnes ?? 0), 0);
   const recentLots = db.lots.filter((l) => l.blockId && daysSince(l.createdAt) <= 60);
-  const avgCost = recentLots.reduce((a, l) => a + l.cost, 0) / Math.max(1, recentLots.reduce((a, l) => a + l.sqft, 0));
+  const avgCost = recentLots.reduce((a, l) => a + lotCost(ctx.root, l), 0) / Math.max(1, recentLots.reduce((a, l) => a + l.sqft, 0));
 
   const putBlock = (b: Block) => update((d) => { const i = d.blocks.findIndex((x) => x.id === b.id); if (i >= 0) d.blocks[i] = b; else d.blocks.push(b); });
 
@@ -75,19 +74,9 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
     { key: "q", label: "Sq ft", align: "right", render: (j) => n0(j.sqft), sort: (j) => j.sqft },
     { key: "y", label: "Sq ft / t", align: "right", render: (j) => { const b = db.blocks.find((x) => x.id === j.blockId); const y = b?.tonnes ? j.sqft / b.tonnes : 0; const avg = b ? varAvg[b.variety] : 0; return <div><div>{n0(y)}</div>{avg && y < avg * 0.92 ? <div className="text-[0.78rem] text-warn">avg {n0(avg)}</div> : null}</div>; }, sort: (j) => { const b = db.blocks.find((x) => x.id === j.blockId); return b?.tonnes ? j.sqft / b.tonnes : 0; } },
     { key: "pc", label: "Processing ₹/sq ft", align: "right", render: (j) => rs2(jobCost(j) / Math.max(1, j.sqft)) },
-    { key: "lc", label: "Slab cost ₹/sq ft", align: "right", render: (j) => { const l = db.lots.find((x) => x.id === j.lotId); return l ? <span className="font-medium">{rs2(lotRate(l))}</span> : "—"; }, sort: (j) => { const l = db.lots.find((x) => x.id === j.lotId); return l ? lotRate(l) : 0; } },
+    { key: "lc", label: "Slab cost ₹/sq ft", align: "right", render: (j) => { const l = db.lots.find((x) => x.id === j.lotId); return l ? <span className="font-medium">{rs2(lotUnit(ctx.root, l))}</span> : "—"; }, sort: (j) => { const l = db.lots.find((x) => x.id === j.lotId); return l ? lotUnit(ctx.root, l) : 0; } },
   ];
   const jobCols = jobColsAll.filter((c) => C || (c.key !== "pc" && c.key !== "lc"));
-
-  const lotCols: Col<SlabLot>[] = [
-    { key: "blk", label: "Block no.", render: (l) => <span className="font-medium">{ctx.root.blocks.find((b) => b.id === l.blockId)?.no ?? "—"}</span>, sort: (l) => ctx.root.blocks.find((b) => b.id === l.blockId)?.no ?? "" },
-    { key: "lot", label: "Lot", render: (l) => <div><div className="font-medium">{l.lotNo}</div><div className="text-[0.8rem] text-ink-3">{l.variety} · {l.thicknessMm} mm · {l.finish}</div></div> },
-    { key: "n", label: "Slabs", align: "right", render: (l) => <span className="font-medium">{slabCount(l)}</span>, sort: (l) => slabCount(l) },
-    { key: "q", label: "Sq ft in stock", align: "right", render: (l) => n0(l.available), sort: (l) => l.available },
-    ...(C ? [{ key: "c", label: "Cost ₹/sq ft", align: "right" as const, render: (l: SlabLot) => rs2(lotRate(l)) }] : []),
-    { key: "loc", label: "Rack", render: (l) => l.location },
-    { key: "a", label: "", render: (l) => ctx.edit("processing") ? <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>{ctx.firms.length > 1 && <button className="btn btn-quiet btn-sm" onClick={() => setSend({ item: l, kind: "lot" })}>Send to firm <ArrowRight size={13} /></button>}{!(ctx.firms.length > 1) && <button className="btn btn-quiet btn-sm" onClick={() => setMove(l)}>Send to depot <ArrowRight size={13} /></button>}</div> : null },
-  ];
 
   return (
     <div>
@@ -95,20 +84,18 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
         <Stat label="Blocks in yard" value={`${inYard.length} · ${n0(inYard.reduce((a, b) => a + b.tonnes, 0))} t`} sub={C ? `${lakh(inYard.reduce((a, b) => a + blockCost(b), 0))} at cost · ${yard.length - inYard.length} on the road` : `${yard.length - inYard.length} on the road`} />
         <Stat label="Slabs cut, last 30 days" value={`${n0(jobsMonth.reduce((a, j) => a + j.sqft, 0))} sq ft`} sub={`${jobsMonth.length} blocks sawn`} />
         <Stat label="Average yield" value={`${n0(allT ? allSqft / allT : 0)} sq ft/t`} sub="All sawn blocks" />
-        {C ? <Stat label="Slab cost, last 60 days" value={`${rs2(avgCost)}/sq ft`} sub="Block + royalty + freight + damage + processing" /> : <Stat label="Slabs at unit" value={`${n0(unitLots.reduce((a, l) => a + l.available, 0))} sq ft`} sub={`${unitLots.length} lots`} />}
+        {C ? <Stat label="Slab cost, last 60 days" value={`${rs2(avgCost)}/sq ft`} sub="Block, royalty, freight, damage, sawing and stores" /> : <Stat label="Slabs at unit" value={`${n0(unitLots.reduce((a, l) => a + l.available, 0))} sq ft`} sub={`${unitLots.length} lots`} />}
       </div>
 
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <Seg value={tab} onChange={setTab} tabs={([
           { key: "yard", label: "Block yard", count: yard.length },
           { key: "sawing", label: "Sawing log", count: db.jobs.length },
-          { key: "slabs", label: "Slabs", count: db.lots.reduce((a, l) => a + (l.slabs?.filter((x) => x.status === "stock").length ?? 0), 0) },
-          { key: "lots", label: "Lots at unit", count: unitLots.length },
           { key: "damage", label: "Damage & loss", count: db.damages.length },
         ] as { key: Tab; label: string; count: number }[]).filter((t) => allowed.includes(t.key))} />
         <div className="ml-auto flex gap-2">
           {tab === "yard" && <button className="btn btn-quiet btn-sm" onClick={() => setLabels(true)}><QrCode size={15} />QR labels</button>}
-          {tab === "yard" && ctx.edit("blocks") && <button className="btn btn-primary btn-sm" onClick={() => setAddNew(true)}><Plus size={15} />Block arrived</button>}
+          {tab === "yard" && ctx.edit("blocks") && <button className="btn btn-quiet btn-sm" onClick={() => ctx.go("purchases")}><Plus size={15} />New purchase</button>}
           {tab === "damage" && ctx.edit("processing") && <button className="btn btn-primary btn-sm" onClick={() => setDmg("new")}><AlertTriangle size={14} />Record damage</button>}
         </div>
       </div>
@@ -117,18 +104,14 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
         {tab === "yard" && <Table rows={yard} cols={yardCols} onRow={setEdit} search={(b) => `${b.no} ${b.variety} ${b.vehicleNo}`} empty="No blocks in the yard. Blocks dispatched from mines show up here." />}
         {tab === "sawing" && <Table rows={[...db.jobs].reverse()} cols={jobCols} search={(j) => `${db.blocks.find((b) => b.id === j.blockId)?.no} ${j.machine}`} empty="No blocks sawn yet." />}
         {tab === "damage" && <DamageList ctx={ctx} onOpen={setDmg} />}
-        {tab === "slabs" && <SlabsView ctx={ctx} />}
-        {tab === "lots" && <Table rows={unitLots} cols={lotCols} search={(l) => `${db.blocks.find((b) => b.id === l.blockId)?.no ?? ""} ${l.lotNo} ${l.variety}`} empty="No slab lots waiting at the unit." />}
       </div>
 
       {labels && <QrLabels ctx={ctx} blocks={yard} onClose={() => setLabels(false)} />}
-      {edit && <BlockForm costs={C} db={db} initial={edit} mode="edit" onTransfer={ctx.firms.length > 1 && ctx.edit("blocks") ? () => { setSend({ item: edit, kind: "block" }); setEdit(null); } : undefined} onClose={() => setEdit(null)} onSave={(b) => { putBlock(b); setEdit(null); }} onDelete={(id) => { update((d) => { d.blocks = d.blocks.filter((x) => x.id !== id); }); setEdit(null); }} />}
-      {addNew && <BlockForm costs={C} db={db} initial={null} mode="receive" onClose={() => setAddNew(false)} onSave={(b) => { putBlock(b); setAddNew(false); }} />}
+      {edit && <BlockForm costs={C} db={db} initial={edit} mode="edit" onTransfer={ctx.firms.length > 1 && ctx.edit("blocks") ? () => { setSend(edit); setEdit(null); } : undefined} onClose={() => setEdit(null)} onSave={(b) => { putBlock(b); setEdit(null); }} onDelete={(id) => { update((d) => { d.blocks = d.blocks.filter((x) => x.id !== id); }); setEdit(null); }} />}
       {receive && <ReceiveForm block={receive} density={db.settings.density} onClose={() => setReceive(null)} onSave={(b, damaged) => { putBlock(b); setReceive(null); if (damaged) { setTab("damage"); setDmg("new"); } }} />}
-      {send && <TransferForm ctx={ctx} item={send.item} kind={send.kind} onClose={() => setSend(null)} />}
-      {saw && <SawForm ctx={ctx} block={saw} onClose={() => setSaw(null)} onDone={() => { setSaw(null); setTab("slabs"); }} />}
+      {send && <TransferForm ctx={ctx} item={send} kind="block" onClose={() => setSend(null)} />}
+      {saw && <SawForm ctx={ctx} block={saw} onClose={() => setSaw(null)} onDone={() => { setSaw(null); ctx.go("inventory", "slabs"); }} />}
       {dmg && <DamageForm ctx={ctx} initial={dmg === "new" ? null : dmg} onClose={() => setDmg(null)} />}
-      {move && <MoveForm lot={move} onClose={() => setMove(null)} onSave={(freight, loc) => { update((d) => { const l = d.lots.find((x) => x.id === move.id)!; l.site = "depot"; l.location = loc; l.cost += freight; }); setMove(null); }} />}
     </div>
   );
 }
@@ -180,6 +163,9 @@ function SawForm({ ctx, block, onClose, onDone }: { ctx: Ctx; block: Block; onCl
   const { db, update } = ctx;
   const S = db.settings;
   const C = ctx.costs;
+  // With Stores in use, blades, resin, netting and polishing come from what the store issues each month, spread per sq ft.
+  const fromStores = ctx.mods.stores;
+  const est = (rate: number, sqft: number) => (fromStores ? 0 : Math.round(sqft * rate));
   const firstLot = nextLotNo(db);
   const mkRows = (n: number, L: number, W: number, from: Row[] = [], lot = firstLot, grade = block.grade): Row[] =>
     Array.from({ length: Math.max(0, Math.min(200, Math.round(n))) }, (_, i) => from[i] ?? { id: uid(), no: slabNo(block.no, i + 1), l: L, w: W, sqft: slabArea(L, W), grade, lotNo: from[from.length - 1]?.lotNo ?? lot, broken: false });
@@ -190,8 +176,8 @@ function SawForm({ ctx, block, onClose, onDone }: { ctx: Ctx; block: Block; onCl
     const hours = block.stoneType === "granite" ? 70 : 28;
     return {
       id: uid(), blockId: block.id, machine: pendingMachine[block.id] || S.machines[0] || "Gang saw 1", startedOn: today(), finishedOn: today(), thicknessMm: thick, slabs,
-      slabL: block.l - 6, slabW: block.w - 4, sqft, rejectSqft: 0, hours, power: Math.round(hours * S.sawKw * 0.8 * S.powerRate), blades: Math.round(sqft * S.bladePerSqft),
-      resin: Math.round(sqft * S.resinPerSqft), netting: Math.round(sqft * S.nettingPerSqft), polishing: Math.round(sqft * S.polishPerSqft), labour: Math.round(sqft * S.labourPerSqft), other: 0,
+      slabL: block.l - 6, slabW: block.w - 4, sqft, rejectSqft: 0, hours, power: Math.round(hours * S.sawKw * 0.8 * S.powerRate), blades: est(S.bladePerSqft, sqft),
+      resin: est(S.resinPerSqft, sqft), netting: est(S.nettingPerSqft, sqft), polishing: est(S.polishPerSqft, sqft), labour: Math.round(sqft * S.labourPerSqft), other: 0,
       finish: "Polished", grade: block.grade, lotId: "",
     };
   });
@@ -322,16 +308,19 @@ function SawForm({ ctx, block, onClose, onDone }: { ctx: Ctx; block: Block; onCl
         </ul>
       </Section>
 
-      {C && <Section title="Processing cost" aside={<button className="btn btn-quiet btn-sm" onClick={() => setJ((x) => ({ ...x, power: Math.round(x.hours * S.sawKw * 0.8 * S.powerRate), blades: Math.round(total * S.bladePerSqft), resin: Math.round(total * S.resinPerSqft), netting: Math.round(total * S.nettingPerSqft), polishing: Math.round(total * S.polishPerSqft), labour: Math.round(total * S.labourPerSqft) }))}>Recalculate from rates</button>}>
+      {C && <Section title="Processing cost" aside={<button className="btn btn-quiet btn-sm" onClick={() => setJ((x) => ({ ...x, power: Math.round(x.hours * S.sawKw * 0.8 * S.powerRate), blades: est(S.bladePerSqft, total), resin: est(S.resinPerSqft, total), netting: est(S.nettingPerSqft, total), polishing: est(S.polishPerSqft, total), labour: Math.round(total * S.labourPerSqft) }))}>Recalculate from rates</button>}>
         <Grid cols={3}>
           <F label="Power"><NumIn value={j.power} onChange={(v) => setJ({ ...j, power: v })} suffix="₹" /></F>
-          <F label="Blades / wire"><NumIn value={j.blades} onChange={(v) => setJ({ ...j, blades: v })} suffix="₹" /></F>
-          <F label="Resin / epoxy"><NumIn value={j.resin} onChange={(v) => setJ({ ...j, resin: v })} suffix="₹" /></F>
-          <F label="Fibre netting"><NumIn value={j.netting} onChange={(v) => setJ({ ...j, netting: v })} suffix="₹" /></F>
-          <F label="Polishing line"><NumIn value={j.polishing} onChange={(v) => setJ({ ...j, polishing: v })} suffix="₹" /></F>
+          {!fromStores && <>
+            <F label="Blades / wire"><NumIn value={j.blades} onChange={(v) => setJ({ ...j, blades: v })} suffix="₹" /></F>
+            <F label="Resin / epoxy"><NumIn value={j.resin} onChange={(v) => setJ({ ...j, resin: v })} suffix="₹" /></F>
+            <F label="Fibre netting"><NumIn value={j.netting} onChange={(v) => setJ({ ...j, netting: v })} suffix="₹" /></F>
+            <F label="Polishing line"><NumIn value={j.polishing} onChange={(v) => setJ({ ...j, polishing: v })} suffix="₹" /></F>
+          </>}
           <F label="Labour"><NumIn value={j.labour} onChange={(v) => setJ({ ...j, labour: v })} suffix="₹" /></F>
           <F label="Other"><NumIn value={j.other} onChange={(v) => setJ({ ...j, other: v })} suffix="₹" /></F>
         </Grid>
+        {fromStores && <p className="mt-2 text-[0.82rem] text-ink-3">Blades, resin, netting and polishing are not entered here. Everything issued from Stores this month is spread over the sq ft cut this month and added to each lot.</p>}
       </Section>}
       <Section title="Into stock">
         <Grid cols={3}>
@@ -343,7 +332,7 @@ function SawForm({ ctx, block, onClose, onDone }: { ctx: Ctx; block: Block; onCl
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl bg-surface p-4"><div className="text-sm text-ink-2">Block landed</div><div className="num mt-1 text-xl font-semibold">{rs(blockCost(block))}</div>{block.damageAlloc > 0 && <div className="text-[0.8rem] text-warn">includes {rs(block.damageAlloc)} damage share</div>}</div>
           <div className="rounded-2xl bg-surface p-4"><div className="text-sm text-ink-2">Processing</div><div className="num mt-1 text-xl font-semibold">{rs(jobCost(job))}</div><div className="text-[0.8rem] text-ink-3">{rs2(jobCost(job) / Math.max(1, total))}/sq ft</div></div>
-          <div className="rounded-2xl bg-accent-soft p-4"><div className="text-sm text-ink-2">Slab cost</div><div className="num mt-1 text-xl font-semibold">{rs2(allCost / Math.max(1, good))}/sq ft</div><div className="text-[0.8rem] text-ink-2">{n0(y)} sq ft per tonne</div></div>
+          <div className="rounded-2xl bg-accent-soft p-4"><div className="text-sm text-ink-2">Slab cost{fromStores ? ", before stores" : ""}</div><div className="num mt-1 text-xl font-semibold">{rs2(allCost / Math.max(1, good))}/sq ft</div><div className="text-[0.8rem] text-ink-2">{n0(y)} sq ft per tonne</div></div>
         </div>
       </Section>}
     </Drawer>
@@ -496,7 +485,7 @@ function DamageForm({ ctx, initial, onClose }: { ctx: Ctx; initial: DamageEvent 
   );
 }
 
-function MoveForm({ lot, onSave, onClose }: { lot: SlabLot; onSave: (freight: number, loc: string) => void; onClose: () => void }) {
+export function MoveForm({ lot, onSave, onClose }: { lot: SlabLot; onSave: (freight: number, loc: string) => void; onClose: () => void }) {
   const [rate, setRate] = useState(1.5);
   const [loc, setLoc] = useState("Depot A-frame 1");
   return (

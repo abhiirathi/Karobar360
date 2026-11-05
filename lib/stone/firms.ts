@@ -3,8 +3,8 @@ import type { Block, Firm, FirmKind, Modules, SlabLot, StoneDB, StoneSettings, T
 
 export const FIRM_KINDS: { key: FirmKind; label: string; hint: string; m: Partial<Modules> }[] = [
   { key: "mine", label: "Mine / quarry", hint: "Extracts blocks, rawanna, diesel and wire per tonne", m: { quarry: true, stores: true } },
-  { key: "processing", label: "Processing unit", hint: "Block yard, gang saws, slabs and lots", m: { buyBlocks: true, processing: true, stores: true } },
-  { key: "distribution", label: "Distribution / depot", hint: "Slab stock, warehouse, sales and dealers", m: { trading: true, depot: true } },
+  { key: "processing", label: "Manufacturing unit", hint: "Block yard, gang saws, slabs and lots", m: { buyBlocks: true, processing: true, stores: true } },
+  { key: "distribution", label: "Distribution / depot", hint: "Slab inventory, warehouse, sales and dealers", m: { trading: true, depot: true } },
   { key: "trade", label: "Import and export", hint: "Shipments, BLs, landed cost, exports", m: { imports: true, exports: true, trading: true, depot: true } },
   { key: "other", label: "Other", hint: "Pick the sections yourself", m: { depot: true } },
 ];
