@@ -99,7 +99,7 @@ export default function Parties({ ctx, kind }: { ctx: Ctx; kind: PartyKind }) {
   );
 }
 
-function PartyForm({ initial, onSave, onDelete, onClose, inUse, can }: { initial: Party; onSave: (p: Party) => void; onDelete: (id: string) => void; onClose: () => void; inUse: boolean; can: boolean }) {
+export function PartyForm({ initial, onSave, onDelete, onClose, inUse, can }: { initial: Party; onSave: (p: Party) => void; onDelete: (id: string) => void; onClose: () => void; inUse: boolean; can: boolean }) {
   const [p, setP] = useState<Party>({ ...initial, mines: [...(initial.mines ?? [])] });
   const [same, setSame] = useState(!initial.shipping);
   const [err, setErr] = useState("");

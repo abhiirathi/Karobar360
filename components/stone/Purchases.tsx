@@ -3,11 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 import { PackagePlus, Plus, Trash2 } from "lucide-react";
 import { baseCost, cbm, daysSince, dmy, lakh, n0, n2, r2, rs, rs2, today, uid, weightCheck, WEIGHT_TOLERANCE } from "@/lib/stone/calc";
 import { nextBlockNo, qualities, qualityOf, split } from "@/lib/stone/costing";
-import { emptyBlock } from "@/lib/stone/seed";
-import type { Block, BlockStatus, Grade, ImportBill, SlabLot, StoneType } from "@/lib/stone/types";
+import { emptyBlock, emptyParty } from "@/lib/stone/seed";
+import type { Block, BlockStatus, Grade, ImportBill, Party, SlabLot, StoneType } from "@/lib/stone/types";
 import type { Ctx } from "./StoneApp";
 import { STATUS_LABEL } from "./BlockForm";
 import { BuyForm } from "./Depot";
+import { PartyForm } from "./Parties";
 import { Area, Badge, Drawer, F, Grid, Note, NumIn, Pick, Section, Sel, Seg, Stat, Table, TextIn, setUrlTab, type Col } from "./ui";
 
 type Tab = "domestic" | "import" | "slabs";
@@ -143,8 +144,11 @@ function PurchaseForm({ ctx, bill, imp, onClose }: { ctx: Ctx; bill: Bill | null
     return lines.map((x) => { if (!x.auto) return x.no; const n = nextBlockNo({ ...db, blocks: others }, x.quality || "Block", taken); taken.push(n); return n; });
   }, [lines, db]);
 
-  const pickSupplier = (id: string) => {
-    const p = db.parties.find((x) => x.id === id);
+  const [newSup, setNewSup] = useState<Party | null>(null);
+  const canAddSup = ctx.edit("parties");
+  const addSupplier = (name: string) => setNewSup({ ...emptyParty("supplier"), company: name, ...(imp ? { intl: true, state: "96", country: "" } : {}) });
+  const pickSupplier = (id: string, made?: Party) => {
+    const p = made ?? db.parties.find((x) => x.id === id);
     const ms = p?.mines ?? [];
     setH((x) => ({ ...x, supplierId: id, mine: ms.length === 1 ? ms[0] : ms.includes(x.mine) ? x.mine : "" }));
   };
@@ -208,8 +212,9 @@ function PurchaseForm({ ctx, bill, imp, onClose }: { ctx: Ctx; bill: Bill | null
       footer={can ? <><button className="btn btn-primary" onClick={save}>{bill ? "Save" : `Add ${lines.length} block${lines.length > 1 ? "s" : ""}`}</button><button className="btn btn-quiet" onClick={onClose}>Cancel</button>{err && <span className="text-sm text-neg">{err}</span>}{canDelete && <button className="btn btn-quiet btn-sm ml-auto !text-neg" onClick={del}><Trash2 size={14} />Delete purchase</button>}</> : <button className="btn btn-quiet" onClick={onClose}>Close</button>}>
       <Section title="Supplier">
         <Grid cols={3}>
-          <F box label="Supplier *" span={2} hint={!suppliers.length ? `Add ${imp ? "an import" : "a domestic"} supplier under Masters → Suppliers first.` : supplier ? [supplier.city, supplier.intl ? supplier.country : supplier.gstin].filter(Boolean).join(" · ") : undefined}>
-            <Pick align="left" onPick={pickSupplier} placeholder={supplier ? supplier.company : "Choose supplier"} empty="No supplier matches" options={suppliers.map((p) => ({ v: p.id, l: p.company, sub: [p.city, p.intl ? p.country : (p.mines ?? []).join(", ")].filter(Boolean).join(" · ") }))} />
+          <F box label="Supplier *" span={2} hint={!suppliers.length ? (canAddSup ? `No ${imp ? "import" : "domestic"} suppliers yet. Add one from the list.` : `Ask your owner to add ${imp ? "an import" : "a domestic"} supplier under Masters → Suppliers.`) : supplier ? [supplier.city, supplier.intl ? supplier.country : supplier.gstin].filter(Boolean).join(" · ") : undefined}>
+            <Pick align="left" onPick={(id) => pickSupplier(id)} placeholder={supplier ? supplier.company : "Choose supplier"} search="Search suppliers, city, mine…" empty="No supplier matches"
+              onAdd={canAddSup ? addSupplier : undefined} addLabel={`Add new ${imp ? "import " : ""}supplier`} options={suppliers.map((p) => ({ v: p.id, l: p.company, sub: [p.city, p.intl ? p.country : (p.mines ?? []).join(", ")].filter(Boolean).join(" · ") }))} />
           </F>
           <F label="Date" hint="Today unless you change it"><TextIn type="date" value={h.date} onChange={(v) => setHd("date", v)} /></F>
           {!imp && (mines.length > 1
@@ -225,7 +230,7 @@ function PurchaseForm({ ctx, bill, imp, onClose }: { ctx: Ctx; bill: Bill | null
           {lines.map((x, i) => (
             <div key={x.id} className="rounded-2xl bg-surface p-3">
               <div className="grid items-end gap-2 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,0.8fr)_auto]">
-                <F box label="Quality *"><Pick align="left" onPick={(v) => setLine(i, { quality: v, stoneType: qualityOf(db, v)?.stoneType ?? x.stoneType })} placeholder={x.quality || "Choose quality"} empty="No quality matches" options={quals.map((q) => ({ v: q, l: q, sub: qualityOf(db, q)?.stoneType }))} /></F>
+                <F box label="Quality *"><Pick align="left" onPick={(v) => setLine(i, { quality: v, stoneType: qualityOf(db, v)?.stoneType ?? x.stoneType })} placeholder={x.quality || "Choose quality"} search="Search qualities…" empty="No quality matches" options={quals.map((q) => ({ v: q, l: q, sub: qualityOf(db, q)?.stoneType }))} /></F>
                 <F box label="Block no.">
                   <div className="flex items-center gap-2">
                     {x.auto ? <div className="field num flex-1 text-ink-2">{nos[i]}</div> : <div className="flex-1"><TextIn value={x.no} onChange={(v) => setLine(i, { no: v })} upper placeholder="MW-233" /></div>}
@@ -335,6 +340,8 @@ function PurchaseForm({ ctx, bill, imp, onClose }: { ctx: Ctx; bill: Bill | null
           </div>
         </Section>
       )}
+      {newSup && <PartyForm initial={newSup} can inUse={false} onClose={() => setNewSup(null)} onDelete={() => setNewSup(null)}
+        onSave={(p) => { update((d) => { d.parties.push(p); }); pickSupplier(p.id, p); setNewSup(null); ctx.say(`${p.company} added to suppliers`, "good"); }} />}
     </Drawer>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, Search, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, Plus, Search, X } from "lucide-react";
 
 export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "warn" | "neg" | "good" }) {
   const t = tone === "neg" ? "text-neg" : tone === "warn" ? "text-warn" : tone === "good" ? "text-accent" : "text-ink-3";
@@ -213,7 +213,11 @@ export function Sel({ value, onChange, options, placeholder }: { value: string; 
 }
 
 /** Searchable picker for long lists (lots, blocks). Type to filter, arrow keys and Enter to choose. */
-export function Pick({ onPick, options, placeholder, empty = "Nothing matches", align = "right" }: { onPick: (v: string) => void; options: { v: string; l: string; sub?: string; find?: string }[]; placeholder: string; empty?: string; align?: "left" | "right" }) {
+export function Pick({ onPick, options, placeholder, empty = "Nothing matches", align = "right", search = "Search…", onAdd, addLabel = "Add new" }: {
+  onPick: (v: string) => void; options: { v: string; l: string; sub?: string; find?: string }[]; placeholder: string; empty?: string; align?: "left" | "right";
+  /** Placeholder of the search box. */ search?: string;
+  /** Shows an "add new" row under the list; gets what was typed in the search box. */ onAdd?: (q: string) => void; addLabel?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [hi, setHi] = useState(0);
@@ -238,7 +242,7 @@ export function Pick({ onPick, options, placeholder, empty = "Nothing matches", 
         <div className={`absolute ${align === "left" ? "left-0" : "right-0"} z-50 mt-1 w-[min(92vw,440px)] overflow-hidden rounded-2xl border border-surface-2 bg-ground shadow-xl`}>
           <label className="flex items-center gap-2 border-b border-surface-2 px-3 py-2.5">
             <Search size={15} className="text-ink-3" />
-            <input autoFocus value={q} onChange={(e) => { setQ(e.target.value); setHi(0); }} placeholder="Search lot, block, variety…" className="w-full bg-transparent text-[0.92rem] outline-none placeholder:text-ink-3"
+            <input autoFocus value={q} onChange={(e) => { setQ(e.target.value); setHi(0); }} placeholder={search} className="w-full bg-transparent text-[0.92rem] outline-none placeholder:text-ink-3"
               onKeyDown={(e) => {
                 if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(shown.length - 1, h + 1)); }
                 else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(0, h - 1)); }
@@ -256,6 +260,12 @@ export function Pick({ onPick, options, placeholder, empty = "Nothing matches", 
             ))}
             {!shown.length && <li className="px-3 py-4 text-center text-[0.88rem] text-ink-3">{empty}</li>}
           </ul>
+          {onAdd && (
+            <button type="button" onClick={() => { const t = q.trim(); setOpen(false); setQ(""); setHi(0); onAdd(t); }}
+              className="flex w-full items-center gap-2 border-t border-surface-2 px-3 py-2.5 text-left text-[0.9rem] font-medium text-accent hover:bg-accent-soft">
+              <Plus size={15} className="shrink-0" />{addLabel}{q.trim() ? <span className="truncate font-normal text-ink-2">“{q.trim()}”</span> : null}
+            </button>
+          )}
         </div>
       )}
     </div>
