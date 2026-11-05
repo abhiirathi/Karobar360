@@ -95,6 +95,8 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
   const [view, setView] = useState<View>(MOVED[initialView ?? ""]?.[0] ?? initialView ?? "overview");
   const [sub, setSub] = useState(MOVED[initialView ?? ""]?.[1] ?? initialSub ?? "");
   const [openNav, setOpenNav] = useState<Set<View>>(new Set());
+  // Groups the user folded up while a page inside them is open.
+  const [closedNav, setClosedNav] = useState<Set<View>>(new Set());
 
   useEffect(() => {
     if (initialView) return;
@@ -110,7 +112,8 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
   const [navN, setNavN] = useState(0);
   const go = (v: View, t = "") => {
     setNavN((n) => n + 1);
-    setOpenNav((o) => (o.has(v) ? o : new Set([...o, v])));
+    setOpenNav((o) => (o.size === 1 && o.has(v) ? o : new Set([v]))); // one group open at a time
+    setClosedNav((o) => { if (!o.has(v)) return o; const x = new Set(o); x.delete(v); return x; });
     setView(v);
     setSub(t);
     const p = new URLSearchParams();
@@ -187,14 +190,18 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
             const I = n.icon;
             const cs = kids(n);
             if (n.children) {
-              const expanded = openNav.has(n.key) || on;
+              const expanded = on ? !closedNav.has(n.key) : openNav.has(n.key);
+              const toggle = () => {
+                if (!on) { go(n.key, cs[0]?.sub ?? ""); return; }
+                setClosedNav((o) => { const x = new Set(o); if (expanded) x.add(n.key); else x.delete(n.key); return x; });
+              };
               return (
                 <div key={n.key} className="flex shrink-0 gap-1 lg:flex-col">
-                  <button onClick={() => { if (!on) go(n.key, cs[0]?.sub ?? ""); else setOpenNav((o) => { const x = new Set(o); if (expanded) x.delete(n.key); else x.add(n.key); return x; }); }} aria-expanded={expanded}
-                    className={`focusable flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[0.92rem] transition-colors lg:py-2.5 ${on ? "bg-surface-2 text-ink" : "text-ink-2 hover:bg-surface-2 hover:text-ink"}`}>
+                  <button onClick={toggle} aria-expanded={expanded} aria-current={on && !expanded ? "page" : undefined}
+                    className={`focusable flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[0.92rem] transition-colors lg:py-2.5 ${on ? (expanded ? "bg-surface-2 text-ink" : "bg-accent text-accent-ink") : "text-ink-2 hover:bg-surface-2 hover:text-ink"}`}>
                     <I size={17} strokeWidth={1.9} className="shrink-0" />
                     <span className="whitespace-nowrap font-medium">{n.label}</span>
-                    <ChevronDown size={15} className={`ml-auto shrink-0 text-ink-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
+                    <ChevronDown size={15} className={`ml-auto shrink-0 transition-transform ${on && !expanded ? "opacity-80" : "text-ink-3"} ${expanded ? "rotate-180" : ""}`} />
                   </button>
                   {expanded && cs.map((c) => {
                     const cOn = on && c.sub === childSub;
