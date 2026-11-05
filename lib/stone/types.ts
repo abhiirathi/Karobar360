@@ -358,6 +358,7 @@ export interface TallySettings {
   storesLedger: string; // purchase ledger for consumables
   show: string[]; // Tally figures to show on the dashboard
   partyNames: Record<string, string>; // our party id → ledger name in Tally, when it differs
+  firmCompany?: Record<string, string>; // firm id → company name in Tally
 }
 
 export interface StoneSettings {
@@ -421,4 +422,8 @@ export interface TallyData {
   gstPayable: number;
   topDebtors: { name: string; amount: number }[];
   topCreditors: { name: string; amount: number }[];
+  /** Every company that was open in Tally, when the connector sent more than one. */
+  companies?: TallyData[];
+  /** Windows computer the connector ran on. */
+  computer?: string;
 }

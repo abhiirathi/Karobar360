@@ -27,12 +27,13 @@ export function scope(db: StoneDB, firmId: string | null): StoneDB {
     const keys = Object.keys(ALL_MODULES) as (keyof Modules)[];
     const m = presetModules({});
     for (const f of firms) for (const k of keys) m[k] = m[k] || !!f.modules[k];
-    return { ...db, settings: { ...db.settings, modules: m } };
+    return { ...db, settings: { ...db.settings, modules: m }, tally: groupTally(db.tally) };
   }
   const f = firms.find((x) => x.id === firmId);
   if (!f) return db;
   const out = { ...db } as StoneDB;
   for (const k of SCOPED) (out as unknown as Record<string, { firmId?: string }[]>)[k] = (db[k] as { firmId?: string }[]).filter((x) => firmOf(x, db.settings) === f.id);
+  out.tally = tallyOfFirm(db, f);
   out.settings = { ...db.settings, company: f.name, gstin: f.gstin, address: f.address, city: f.city, state: f.state, pincode: f.pincode, phone: f.phone || db.settings.phone, invoicePrefix: f.invoicePrefix, modules: f.modules };
   return out;
 }
@@ -97,4 +98,28 @@ export function journey(db: StoneDB, q: string) {
     : lot && !block ? { what: `Lot ${lot.lotNo}`, now: `${Math.round(lot.available)} sq ft in stock · ${firmName(s, firmOf(lot, s))}` }
     : { what: `Block ${block!.no}`, now: `${block!.status.replace("_", " ")} · ${firmName(s, firmOf(block!, s))}` };
   return { ...where, steps };
+}
+
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/** The Tally company that belongs to a firm: the one picked on the Tally page, else the one with the same name. */
+export function tallyOfFirm(db: StoneDB, f: Firm): StoneDB["tally"] {
+  const t = db.tally;
+  if (!t) return undefined;
+  const list = t.companies?.length ? t.companies : [t];
+  const picked = db.tallyCfg?.firmCompany?.[f.id];
+  if (picked) return list.find((c) => c.company === picked);
+  const n = norm(f.name);
+  return list.find((c) => norm(c.company) === n) ?? list.find((c) => n && (norm(c.company).includes(n) || n.includes(norm(c.company)))) ?? (list.length === 1 && firmsOf(db.settings)[0]?.id === f.id ? list[0] : undefined);
+}
+
+/** All companies in Tally added together, for the group view. */
+export function groupTally(t: StoneDB["tally"]): StoneDB["tally"] {
+  if (!t?.companies || t.companies.length < 2) return t;
+  const cs = t.companies;
+  const months = new Map<string, { m: string; sales: number; purchases: number; expenses: number }>();
+  for (const c of cs) for (const m of c.months) { const x = months.get(m.m) ?? { m: m.m, sales: 0, purchases: 0, expenses: 0 }; x.sales += m.sales; x.purchases += m.purchases; x.expenses += m.expenses; months.set(m.m, x); }
+  const sum = (k: "receivables" | "payables" | "cashBank" | "gstPayable") => cs.reduce((a, c) => a + c[k], 0);
+  const top = (k: "topDebtors" | "topCreditors") => cs.flatMap((c) => c[k]).sort((a, b) => b.amount - a.amount).slice(0, 5);
+  return { ...t, company: `${cs.length} companies`, months: [...months.values()].sort((a, b) => a.m.localeCompare(b.m)), receivables: sum("receivables"), payables: sum("payables"), cashBank: sum("cashBank"), gstPayable: sum("gstPayable"), topDebtors: top("topDebtors"), topCreditors: top("topCreditors") };
 }

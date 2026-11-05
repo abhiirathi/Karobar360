@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Download, KeyRound, MonitorDown, RefreshCw } from "lucide-react";
+import { Download, KeyRound, RefreshCw } from "lucide-react";
 import { ChartBody } from "@/components/Charts";
 import { lakh, rs, today } from "@/lib/stone/calc";
 import { tallyOf } from "@/lib/stone/modules";
+import { tallyOfFirm } from "@/lib/stone/firms";
 import { TALLY_METRICS, mastersXml, purchasesOf, purchasesXml, salesXml } from "@/lib/stone/tally";
 import type { TallyData, TallySettings } from "@/lib/stone/types";
 import type { ChartSpec } from "@/lib/types";
@@ -84,6 +85,7 @@ export default function TallyView({ ctx }: { ctx: Ctx }) {
 function Figures({ ctx, T, setCfg, editable }: { ctx: Ctx; T: TallySettings; setCfg: (p: Partial<TallySettings>) => void; editable: boolean }) {
   const t = ctx.db.tally;
   if (!t) {
+    if (ctx.root.tally && ctx.firm) return <Note>None of the companies in Tally is matched to {ctx.firm.name}.{editable ? " Pick its Tally company under “Connect Tally”." : ""}</Note>;
     return <Note>{editable ? "No figures from Tally yet. Set up the connector on the Tally computer from “Connect Tally”. Figures appear here within 15 minutes of the first run." : "No figures from Tally yet. Your owner or accountant can connect Tally."}</Note>;
   }
   const toggle = (k: string) => setCfg({ show: T.show.includes(k) ? T.show.filter((x) => x !== k) : [...T.show, k] });
@@ -177,33 +179,87 @@ function Export({ ctx, T, setCfg }: { ctx: Ctx; T: TallySettings; setCfg: (p: Pa
   );
 }
 
+function ago(iso: string) {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`;
+}
+
 function Connect({ ctx }: { ctx: Ctx }) {
   const [rotated, setRotated] = useState(false);
+  const [more, setMore] = useState(false);
+  const [steps, setSteps] = useState(false);
   if (ctx.mode === "demo") return <Note>Connecting Tally needs a company account. In the demo, use “Export to Tally” to see the files.</Note>;
+  const t = ctx.root.tally;
+  const fresh = t ? Date.now() - new Date(t.syncedAt).getTime() < 40 * 60000 : false;
+  const companies = t ? (t.companies?.length ? t.companies : [t]).map((c) => c.company).filter(Boolean) : [];
+  const T = tallyOf(ctx.root);
+  const map = T.firmCompany ?? {};
+  const setMap = (firmId: string, name: string) => ctx.update((d) => { const c = tallyOf(d); d.tallyCfg = { ...c, firmCompany: { ...(c.firmCompany ?? {}), [firmId]: name } }; });
   const rotate = async () => {
     const r = await fetch("/api/stone/keys", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rotate: "tally" }) });
-    if (r.ok) { setRotated(true); ctx.say("Old connector switched off. Download the new one.", "good"); }
+    if (r.ok) { setRotated(true); ctx.say("Old connector switched off. Download and run the new one.", "good"); }
   };
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl bg-surface p-5">
-        <div className="flex items-start gap-4">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent"><MonitorDown size={18} /></div>
-          <div>
-            <h3 className="font-semibold">Send figures from Tally every 15 minutes</h3>
-            <p className="mt-1 max-w-[70ch] text-[0.92rem] text-ink-2">A small script runs on the computer where Tally is open. It asks Tally for monthly sales, purchases, expenses, debtors, creditors and cash and bank balances, and sends only those totals here. Vouchers stay in Tally.</p>
-            <a href="/api/tally/script" className="btn btn-primary btn-sm mt-4"><Download size={14} />Download the connector</a>
-          </div>
+    <div className="max-w-[820px] space-y-6">
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-surface px-5 py-4">
+        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${!t ? "bg-ink-3" : fresh ? "bg-accent" : "bg-warn"}`} aria-hidden />
+        <div className="min-w-[220px] flex-1">
+          <div className="font-medium">{!t ? "Not connected yet" : fresh ? "Connected" : "Connected, but no update for a while"}</div>
+          <div className="text-[0.86rem] text-ink-2">{t ? <>Last update {ago(t.syncedAt)}{t.computer ? ` from ${t.computer}` : ""}{companies.length ? ` · ${companies.join(", ")}` : ""}{!fresh && ". Check that the Tally computer is on and Tally is open."}</> : "Figures appear here a minute after you run the setup below."}</div>
         </div>
+        <div className="flex gap-2">{t && !steps && <button className="btn btn-quiet btn-sm" onClick={() => setSteps(true)}>Setup steps</button>}<button className="btn btn-quiet btn-sm" onClick={() => window.location.reload()}><RefreshCw size={14} />Check again</button></div>
       </div>
-      <ol className="list-decimal space-y-2 pl-5 text-[0.92rem] text-ink-2">
-        <li>In TallyPrime press F1 (Help) → Settings → Connectivity → Client/Server configuration. Set “TallyPrime acts as” to <b>Both</b>, port <b>9000</b>. In Tally.ERP 9 this is F12 → Advanced Configuration.</li>
-        <li>Make a folder <code className="rounded bg-surface-2 px-1">C:\Karobar360</code> and save the downloaded <code className="rounded bg-surface-2 px-1">karobar360-tally.ps1</code> in it.</li>
-        <li>Test it once: open Command Prompt and run<br /><code className="mt-1 block overflow-x-auto rounded-lg bg-surface-2 px-3 py-2 text-[0.82rem]">powershell -ExecutionPolicy Bypass -File C:\Karobar360\karobar360-tally.ps1</code>It should say “Tally figures updated”. Refresh this page to see them.</li>
-        <li>Make it run every 15 minutes:<br /><code className="mt-1 block overflow-x-auto rounded-lg bg-surface-2 px-3 py-2 text-[0.82rem]">schtasks /create /sc minute /mo 15 /tn &quot;Karobar360 Tally&quot; /tr &quot;powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\Karobar360\karobar360-tally.ps1&quot;</code></li>
-      </ol>
-      <Note>The connector carries a private key for your company. If a computer is lost or a staff member leaves, reset the key and set up the new file.</Note>
-      <button className="btn btn-quiet btn-sm" onClick={rotate}>{rotated ? <RefreshCw size={14} /> : <KeyRound size={14} />}{rotated ? "Key reset" : "Reset connector key"}</button>
+
+      {(!t || steps) && <div className="rounded-2xl bg-surface p-5">
+        <h3 className="font-semibold">{t ? "Set up on another computer" : "Connect in three steps"}</h3>
+        <ol className="mt-4 space-y-4">
+          {[
+            <>On the computer where Tally runs, open TallyPrime and press <b>F1 (Help) → Settings → Connectivity → Client/Server configuration</b>. Set <b>TallyPrime acts as</b> to <b>Both</b> and <b>Port</b> to <b>9000</b>. Keep your companies open.</>,
+            <>On the same computer, download the setup file. If the browser asks, choose <b>Keep</b>.<div className="mt-2"><a href="/api/tally/script" className="btn btn-primary btn-sm"><Download size={14} />Download Tally setup</a></div></>,
+            <>Double-click <b>karobar360-tally-setup.cmd</b>. If Windows shows “Windows protected your PC”, click <b>More info → Run anyway</b>. It sends your figures once, then every 15 minutes while the computer is on.</>,
+          ].map((x, i) => (
+            <li key={i} className="flex gap-3 text-[0.92rem]">
+              <span className="num mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent text-[0.75rem] font-semibold text-accent-ink">{i + 1}</span>
+              <div className="leading-relaxed text-ink-2">{x}</div>
+            </li>
+          ))}
+        </ol>
+        <p className="mt-4 text-[0.84rem] text-ink-3">Only totals are sent: monthly sales, purchases and expenses, debtors, creditors, cash, bank and taxes. Vouchers stay in Tally. Every company open in Tally is sent.</p>
+      </div>}
+
+      {ctx.firms.length > 1 && companies.length > 0 && (
+        <Section title="Which Tally company is which firm">
+          <p className="-mt-1 mb-3 text-[0.9rem] text-ink-2">Each firm’s dashboard shows the figures of its own Tally company. Firms with the same name are matched for you.</p>
+          <ul className="divide-y divide-surface-2 rounded-2xl bg-surface">
+            {ctx.firms.map((f) => (
+              <li key={f.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                <span className="min-w-[180px] flex-1 font-medium">{f.name}</span>
+                <select className="field !w-auto min-w-[220px]" value={map[f.id] ?? ""} onChange={(e) => setMap(f.id, e.target.value)}>
+                  <option value="">{(() => { const g = tallyOfFirm({ ...ctx.root, tallyCfg: { ...T, firmCompany: {} } }, f)?.company; return g ? `Automatic: ${g}` : "Automatic: no match, none shown"; })()}</option>
+                  {companies.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      <div>
+        <button className="text-[0.88rem] font-medium text-accent hover:underline" onClick={() => setMore((m) => !m)}>{more ? "Hide" : "Show"} help and other options</button>
+        {more && (
+          <div className="mt-3 space-y-3 text-[0.9rem] text-ink-2">
+            <p><b className="text-ink">Tally.ERP 9:</b> the setting is under F12 → Advanced Configuration. Set “Tally.ERP 9 is acting as” to Both and the port to 9000.</p>
+            <p><b className="text-ink">Nothing arrives:</b> open <code className="rounded bg-surface-2 px-1">%LOCALAPPDATA%\Karobar360\karobar360-tally.log</code> on the Tally computer. Each run writes a line saying what happened.</p>
+            <p><b className="text-ink">Stop sending:</b> run <code className="rounded bg-surface-2 px-1">schtasks /delete /tn &quot;Karobar360 Tally&quot; /f</code> in Command Prompt, or reset the key below.</p>
+            <p><b className="text-ink">IT team prefers a script:</b> <a className="text-accent underline" href="/api/tally/script?file=ps1">download the PowerShell connector</a> and schedule it yourself.</p>
+            <div className="pt-1"><Note>The setup file carries a private key for your company. If the computer is lost or someone leaves, reset the key and run the new setup.</Note></div>
+            <button className="btn btn-quiet btn-sm" onClick={rotate}>{rotated ? <RefreshCw size={14} /> : <KeyRound size={14} />}{rotated ? "Key reset" : "Reset connector key"}</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
