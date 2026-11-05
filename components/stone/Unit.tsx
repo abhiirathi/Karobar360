@@ -61,6 +61,7 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
 
   const yardCols: Col<Block>[] = [
     { key: "no", label: "Block", render: (b) => <div><div className="font-medium">{b.no}</div><div className="text-[0.8rem] text-ink-3">{b.variety} · {b.grade}</div></div>, sort: (b) => b.no },
+    { key: "od", label: "Ordered", render: (b) => <span className="num whitespace-nowrap">{dmy(b.date)}</span>, sort: (b) => b.date },
     { key: "src", label: "From", render: (b) => <div><div>{b.source === "own_mine" ? "Own quarry" : b.source === "import" ? "Import" : db.parties.find((p) => p.id === b.supplierId)?.company ?? "—"}</div><div className="text-[0.8rem] text-ink-3">{b.vehicleNo}</div></div> },
     { key: "t", label: "Tonnes", align: "right", render: (b) => { const c = weightCheck(b); return <div><div>{n2(b.tonnes || b.billedTonnes)}</div>{c?.flag && <div className="text-[0.78rem] font-medium text-neg">{c.flag === "short" ? "short" : "over"} {(Math.abs(c.pct) * 100).toFixed(1)}% vs {n2(b.billedTonnes)}</div>}</div>; }, sort: (b) => b.tonnes },
     ...(C ? [{ key: "c", label: "₹ / tonne", align: "right" as const, render: (b: Block) => <div><div>{b.tonnes ? rs(perTonne(b)) : "—"}</div>{b.damageAlloc > 0 && <div className="text-[0.78rem] text-warn">+{rs(b.damageAlloc)} damage</div>}</div>, sort: (b: Block) => perTonne(b) }] : []),
@@ -77,7 +78,8 @@ export default function Unit({ ctx }: { ctx: Ctx }) {
 
   const jobColsAll: Col<SawJob>[] = [
     { key: "b", label: "Block", render: (j) => { const b = db.blocks.find((x) => x.id === j.blockId); return <div><div className="font-medium">{b?.no}</div><div className="text-[0.8rem] text-ink-3">{b?.variety}</div></div>; } },
-    { key: "m", label: "Machine", render: (j) => <div><div>{j.machine}</div><div className="text-[0.8rem] text-ink-3">{dmy(j.finishedOn)} · {j.hours} h</div></div>, sort: (j) => j.finishedOn },
+    { key: "sd", label: "Sawn on", render: (j) => <span className="num whitespace-nowrap">{dmy(j.finishedOn)}</span>, sort: (j) => j.finishedOn },
+    { key: "m", label: "Machine", render: (j) => <div><div>{j.machine}</div><div className="text-[0.8rem] text-ink-3">{j.hours} h</div></div>, sort: (j) => j.machine },
     { key: "s", label: "Slabs", align: "right", render: (j) => `${j.slabs} × ${j.thicknessMm} mm` },
     { key: "q", label: "Sq ft", align: "right", render: (j) => n0(j.sqft), sort: (j) => j.sqft },
     { key: "y", label: "Sq ft / t", align: "right", render: (j) => { const b = db.blocks.find((x) => x.id === j.blockId); const y = b?.tonnes ? j.sqft / b.tonnes : 0; const avg = b ? varAvg[b.variety] : 0; return <div><div>{n0(y)}</div>{avg && y < avg * 0.92 ? <div className="text-[0.78rem] text-warn">avg {n0(avg)}</div> : null}</div>; }, sort: (j) => { const b = db.blocks.find((x) => x.id === j.blockId); return b?.tonnes ? j.sqft / b.tonnes : 0; } },

@@ -52,6 +52,8 @@ function BlockInventory({ ctx }: { ctx: Ctx }) {
   const cols: Col<Block>[] = [
     { key: "no", label: "Block no.", render: (b) => <span className="font-medium">{b.no}</span>, sort: (b) => b.no },
     { key: "q", label: "Quality", render: (b) => b.variety, sort: (b) => b.variety },
+    { key: "od", label: "Ordered", render: (b) => <span className="num whitespace-nowrap">{dmy(b.date)}</span>, sort: (b) => b.date },
+    { key: "rd", label: "Received", render: (b) => b.receivedOn ? <span className="num whitespace-nowrap">{dmy(b.receivedOn)}</span> : <span className="text-ink-3">—</span>, sort: (b) => b.receivedOn || "" },
     { key: "s", label: "Supplier", render: (b) => from(b), sort: (b) => from(b) },
     { key: "t", label: "Weight", align: "right", render: (b) => (b.tonnes ? `${n2(b.tonnes)} t` : <span className="text-ink-3">{n2(b.billedTonnes)} t billed</span>), sort: (b) => b.tonnes || b.billedTonnes },
     ...(C ? [{ key: "c", label: "Cost till now ₹/t", align: "right" as const, render: (b: Block) => { const t = b.tonnes || b.billedTonnes; return t ? rs(blockCost(b) / t) : "—"; }, sort: (b: Block) => perTonne(b) }] : []),
@@ -226,6 +228,7 @@ function SlabInventory({ ctx }: { ctx: Ctx }) {
   const cols: Col<SlabLot>[] = [
     { key: "lot", label: "Lot", render: (l) => <div className="flex items-center gap-2.5">{l.photos?.[0] ? <img src={fileSrc(l.photos[0])} alt="" className="h-9 w-12 shrink-0 rounded-md object-cover" /> : null}<span className="font-medium">{l.lotNo}</span></div>, sort: (l) => l.lotNo },
     { key: "blk", label: "Block no.", render: (l) => <span className={blockNo(l) ? "font-medium" : "text-ink-3"}>{src(l)}</span>, sort: (l) => src(l) },
+    { key: "cd", label: "Date", render: (l) => <div><div className="num whitespace-nowrap">{dmy(l.createdAt)}</div><div className="text-[0.8rem] text-ink-3">{l.blockId ? "cut" : "bought"}</div></div>, sort: (l) => l.createdAt },
     { key: "q", label: "Quality", render: (l) => <div><div>{l.variety}</div><div className="text-[0.8rem] text-ink-3">{l.thicknessMm} mm · {l.finish} · grade {l.grade}{l.catalogue ? " · in catalogue" : ""}</div></div>, sort: (l) => l.variety },
     { key: "n", label: "Slabs", align: "right", render: (l) => <span className="font-medium">{slabCount(l)}</span>, sort: (l) => slabCount(l) },
     { key: "s", label: "In stock", align: "right", render: (l) => <div><div>{n0(l.available)} sq ft</div><div className="text-[0.8rem] text-ink-3">of {n0(l.sqft)}</div></div>, sort: (l) => l.available },
