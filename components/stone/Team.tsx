@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, KeyRound, Plus, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, KeyRound, Plus, RefreshCw } from "lucide-react";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { AREAS, ROLES, clampPerms, level, roleLabel, type AreaKey, type Level, type Me, type Perms } from "@/lib/stone/perm";
 import { hasBlocks } from "@/lib/stone/modules";
@@ -275,14 +275,19 @@ function PersonForm({ ctx, person, areas, demo, onClose, onSaved, onRemoved, onD
   );
 }
 
+/** A switch whose state reads at a glance: knob left + grey + "Off", or knob right + green + tick + "On". The whole card is the switch. */
 function Toggle({ on, onChange, label, hint, disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; hint?: string; disabled?: boolean }) {
   return (
-    <label className={`flex items-start gap-3 rounded-xl bg-surface px-4 py-3 ${disabled ? "opacity-50" : "cursor-pointer"}`}>
-      <button type="button" role="switch" aria-checked={on} disabled={disabled} onClick={() => onChange(!on)} className={`relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-accent" : "bg-surface-3"}`}>
-        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-surface transition-transform ${on ? "translate-x-[18px]" : "translate-x-0.5"}`} />
-      </button>
-      <span><span className="block font-medium">{label}</span>{hint && <span className="block text-[0.8rem] text-ink-3">{hint}</span>}</span>
-    </label>
+    <button type="button" role="switch" aria-checked={on} disabled={disabled} onClick={() => onChange(!on)}
+      className={`focusable flex w-full items-start gap-3 rounded-xl px-4 py-3 text-left transition-colors ${on ? "bg-accent-soft ring-1 ring-accent/30" : "bg-surface hover:bg-surface-2"} ${disabled ? "cursor-not-allowed opacity-50" : ""}`}>
+      <span aria-hidden className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors ${on ? "bg-accent" : "bg-ink/20"}`}>
+        <span className={`absolute left-0.5 top-0.5 grid h-5 w-5 place-items-center rounded-full bg-white shadow-sm transition-transform ${on ? "translate-x-5" : "translate-x-0"}`}>
+          {on && <Check size={12} strokeWidth={3} className="text-accent" />}
+        </span>
+      </span>
+      <span className="min-w-0 flex-1"><span className="block font-medium">{label}</span>{hint && <span className="block text-[0.8rem] text-ink-3">{hint}</span>}</span>
+      <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[0.72rem] font-semibold uppercase tracking-wide ${on ? "bg-accent text-accent-ink" : "bg-surface-2 text-ink-3"}`}>{on ? "On" : "Off"}</span>
+    </button>
   );
 }
 
