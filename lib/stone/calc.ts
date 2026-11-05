@@ -30,6 +30,29 @@ export function weightGap(b: Block) {
   return (b.billedTonnes - b.tonnes) / b.tonnes;
 }
 
+/** How far the gate weight may differ from the supplier's quoted weight before the block is flagged. */
+export const WEIGHT_TOLERANCE = 0.05;
+
+export type WeightCheck = { diff: number; pct: number; flag: "short" | "over" | null };
+
+/**
+ * The weight received at the gate against the weight the supplier quoted (bill / rawanna).
+ * diff is in tonnes (negative = received less); pct is against the supplier's weight.
+ * Flagged when it is more than ±5% off. Null until both weights are known.
+ */
+export function weightCheck(b: Pick<Block, "tonnes" | "billedTonnes">): WeightCheck | null {
+  if (!b.billedTonnes || !b.tonnes) return null;
+  const diff = b.tonnes - b.billedTonnes;
+  const pct = diff / b.billedTonnes;
+  return { diff, pct, flag: Math.abs(pct) > WEIGHT_TOLERANCE + 1e-9 ? (diff < 0 ? "short" : "over") : null };
+}
+
+/** Net weight in tonnes from the loaded (A) and empty (B) truck weights in kg; 0 until both make sense. */
+export function netFromTruck(gross?: number, tare?: number) {
+  if (!gross || tare === undefined || tare <= 0 || gross <= tare) return 0;
+  return Math.round(gross - tare) / 1000;
+}
+
 export function jobCost(j: SawJob) {
   return j.power + j.blades + j.resin + j.netting + j.polishing + j.labour + j.other;
 }

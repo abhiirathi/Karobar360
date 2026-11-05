@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowRight, ArrowUp, ChevronRight, SlidersHorizontal } from "lucide-react";
-import { blockCost, cbm, checkGstin, daysSince, freeDaysLeft, lakh, mineWindow, mipCheck, n0, n2, purchaseValue, rs, rs2, saleCost, saleTaxable, saleTotals, weightGap } from "@/lib/stone/calc";
+import { blockCost, cbm, checkGstin, daysSince, freeDaysLeft, lakh, mineWindow, mipCheck, n0, n2, purchaseValue, rs, rs2, saleCost, saleTaxable, saleTotals, weightCheck } from "@/lib/stone/calc";
 import { DASH_WIDGETS, hasBlocks, tallyOf } from "@/lib/stone/modules";
 import { lotCost, lotUnit, storesAlloc } from "@/lib/stone/costing";
 import { onHand, storesOf } from "@/lib/stone/stores";
@@ -48,9 +48,11 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
       if (x.source !== "import" && !x.eRawanna && ["in_transit", "in_yard", "on_saw"].includes(x.status)) {
         out.push({ tone: "neg", text: <>Block <b>{x.no}</b> has no e-Rawanna on record. Get the copy from {party(x.supplierId)?.company ?? "the quarry"} before the stone is cut or sold.</>, go: ["unit", "yard"] });
       }
-      const g = weightGap(x);
-      if (g > 0.02 && x.status !== "rejected") {
-        out.push({ tone: "warn", text: <><b>{x.no}</b> weighed {n2(x.tonnes)} t against {n2(x.billedTonnes)} t billed ({(g * 100).toFixed(1)}% short). Debit note to {party(x.supplierId)?.company ?? "supplier"}{ctx.costs ? `: about ${rs((x.billedTonnes - x.tonnes) * x.rate)}` : ""}.</>, go: ["purchases", "domestic"] });
+      const g = weightCheck(x);
+      if (g?.flag && x.status !== "rejected" && x.status !== "in_transit") {
+        out.push({ tone: "warn", text: g.flag === "short"
+          ? <><b>{x.no}</b> weighed {n2(x.tonnes)} t at the gate against {n2(x.billedTonnes)} t quoted ({(-g.pct * 100).toFixed(1)}% short, over the 5% limit). Debit note to {party(x.supplierId)?.company ?? "supplier"}{ctx.costs ? `: about ${rs(-g.diff * x.rate)}` : ""}.</>
+          : <><b>{x.no}</b> weighed {n2(x.tonnes)} t at the gate against {n2(x.billedTonnes)} t quoted ({(g.pct * 100).toFixed(1)}% more). Check the slip and the bill.</>, go: ["unit", "weight"] });
       }
       if (x.status === "in_yard" && x.receivedOn && daysSince(x.receivedOn) > 45) {
         out.push({ tone: "warn", text: <><b>{x.no}</b> ({x.variety}) has waited {daysSince(x.receivedOn)} days in the yard.{ctx.costs ? ` ${lakh(blockCost(x))} is tied up in it.` : ""}</>, go: ["unit", "yard"] });

@@ -1,35 +1,22 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { Download, Scale } from "lucide-react";
-import { n0, n2 } from "@/lib/stone/calc";
+import { useEffect, useState } from "react";
+import { AlertTriangle, Check, Download, Scale } from "lucide-react";
+import { n0, n2, netFromTruck, rs, weightCheck, type WeightCheck } from "@/lib/stone/calc";
 import type { Block } from "@/lib/stone/types";
 import type { Ctx } from "./StoneApp";
-import { F, Grid, Note, NumIn, Section } from "./ui";
+import { F, Grid, Note, NumIn, Section, TextIn } from "./ui";
 
 export type Reading = { weight: number; stable: boolean; device?: string; age: number };
-type Live = { reading: Reading | null; status: "loading" | "live" | "stale" | "off"; sim?: (kg: number) => void };
+type Live = { reading: Reading | null; status: "loading" | "live" | "stale" | "off" };
 
-/** The weight on the weighbridge right now. Polls the server; in the demo, a simulated weighbridge. */
+/** The weight on a connected weighbridge right now. Only polls when a real connector is set up (never simulated). */
 export function useLiveWeight(ctx: Ctx, on = true): Live {
-  const demo = ctx.mode === "demo";
+  const cloud = ctx.mode === "cloud";
   const [reading, setReading] = useState<Reading | null>(null);
-  const [status, setStatus] = useState<Live["status"]>("loading");
-  const target = useRef(0);
+  const [status, setStatus] = useState<Live["status"]>(cloud ? "loading" : "off");
   useEffect(() => {
-    if (!on) return;
+    if (!on || !cloud) return;
     let stop = false;
-    if (demo) {
-      let cur = 0;
-      setStatus("live");
-      const t = setInterval(() => {
-        const goal = target.current;
-        const diff = goal - cur;
-        cur = Math.abs(diff) < 30 ? goal : cur + diff * 0.35 + (Math.random() - 0.5) * 60;
-        const kg = Math.round(cur / 10) * 10;
-        setReading({ weight: kg, stable: Math.abs(goal - cur) < 30, device: "Demo weighbridge", age: 0 });
-      }, 400);
-      return () => clearInterval(t);
-    }
     const tick = async () => {
       const r = await fetch("/api/weighbridge/live", { cache: "no-store" }).catch(() => null);
       const j = r?.ok ? await r.json().catch(() => null) : null;
@@ -41,8 +28,8 @@ export function useLiveWeight(ctx: Ctx, on = true): Live {
     tick();
     const t = setInterval(tick, 1500);
     return () => { stop = true; clearInterval(t); };
-  }, [demo, on]);
-  return { reading, status, sim: demo ? (kg) => { target.current = kg; } : undefined };
+  }, [cloud, on]);
+  return { reading, status };
 }
 
 /** The big readout of the current weight. */
@@ -65,75 +52,90 @@ export function WeightReadout({ live, compact }: { live: Live; compact?: boolean
 }
 
 const slipNo = () => { const d = new Date(); return `WB-${d.toISOString().slice(2, 10).replace(/-/g, "")}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`; };
-const time = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "");
+const pct1 = (p: number) => `${p > 0 ? "+" : p < 0 ? "−" : ""}${Math.abs(p * 100).toFixed(1)}%`;
 
 /**
- * Gross (truck with the block) and tare (empty truck), from the weighbridge or typed in.
- * Each weight is saved on the block at once, so the truck can be unloaded and weighed again later.
+ * Gate weighment, typed in by hand:
+ * A = truck with the stone, B = the same truck empty after unloading, net = A − B.
+ * The net is checked against the weight the supplier quoted (bill / rawanna); more than ±5% off is flagged.
+ * With a real weighbridge connected, its live reading can fill A or B in one tap.
  */
-export function WeighCapture({ ctx, block, onChange }: { ctx: Ctx; block: Block; onChange: (p: Partial<Block>) => void }) {
-  const [manual, setManual] = useState(block.weigh?.source === "manual");
-  const live = useLiveWeight(ctx, !manual);
-  const w = block.weigh ?? { source: "weighbridge" as const };
-  const ok = live.status === "live" && !!live.reading?.stable;
-  const now = new Date().toISOString();
+export function Weighment({ ctx, block, onChange }: { ctx: Ctx; block: Block; onChange: (p: Partial<Block>) => void }) {
+  const live = useLiveWeight(ctx);
+  const w = block.weigh ?? { source: "manual" as const };
+  const bad = !!w.gross && w.tare !== undefined && w.tare > 0 && w.tare >= w.gross;
+  const fromTruck = !!w.gross && !!w.tare;
+  const reading = live.status === "live" && live.reading?.stable ? live.reading : null;
 
-  const apply = (next: NonNullable<Block["weigh"]>) => {
-    const net = next.gross && next.tare !== undefined && next.gross > next.tare ? Math.round((next.gross - next.tare) / 10) / 100 : 0;
-    const patch: Partial<Block> = { weigh: next, ...(net ? { tonnes: net, weighSlip: block.weighSlip || slipNo() } : {}) };
-    onChange(patch);
-    // Save on the block straight away, so closing the screen between the two weighings loses nothing.
-    if (block.id && next.source === "weighbridge") ctx.update((d) => { const x = d.blocks.find((b) => b.id === block.id); if (x) { x.weigh = next; if (net) { x.tonnes = net; x.weighSlip = x.weighSlip || patch.weighSlip || ""; } } });
+  const setTruck = (k: "gross" | "tare", kg: number, src: "manual" | "weighbridge" = "manual") => {
+    const next: NonNullable<Block["weigh"]> = { ...w, [k]: kg || undefined, [`${k}At`]: kg ? new Date().toISOString() : undefined, source: src === "weighbridge" || w.source === "weighbridge" ? "weighbridge" : "manual", ...(src === "weighbridge" ? { device: reading?.device } : {}) };
+    const net = netFromTruck(next.gross, next.tare);
+    onChange({ weigh: next, ...(net ? { tonnes: net, weighSlip: block.weighSlip || slipNo() } : next.gross && next.tare ? { tonnes: 0 } : {}) });
   };
-  const take = (k: "gross" | "tare") => {
-    if (!live.reading) return;
-    apply({ ...w, source: "weighbridge", device: live.reading.device, [k]: live.reading.weight, [`${k}At`]: now, ...(k === "gross" ? { tare: undefined, tareAt: undefined } : {}) });
-  };
-  const net = w.gross && w.tare !== undefined && w.gross > w.tare ? (w.gross - w.tare) / 1000 : 0;
+  const check = weightCheck(block);
 
   return (
-    <div>
-      {!manual && (
-        <>
-          <WeightReadout live={live} />
-          {live.sim && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[0.8rem] text-ink-3">
-              Demo weighbridge:
-              <button type="button" className="chip" onClick={() => live.sim!(31840)}>Truck with block drives on</button>
-              <button type="button" className="chip" onClick={() => live.sim!(13920)}>Empty truck</button>
-              <button type="button" className="chip" onClick={() => live.sim!(0)}>Nothing on it</button>
-            </div>
-          )}
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <WeighStep n={1} title="Truck with the block" value={w.gross} at={w.grossAt} disabled={!ok} onTake={() => take("gross")} hint={!ok ? (live.status === "live" ? "Wait until the weight is steady" : "Needs the weighbridge connected") : undefined} />
-            <WeighStep n={2} title="Empty truck, after unloading" value={w.tare} at={w.tareAt} disabled={!ok || !w.gross} onTake={() => take("tare")} hint={!w.gross ? "Take the loaded weight first" : !ok ? "Wait until the weight is steady" : undefined} />
-          </div>
-        </>
+    <div className="space-y-4">
+      <Grid cols={3}>
+        <F label="A · Truck with stone" hint="Loaded, at the gate"><NumIn value={w.gross ?? 0} onChange={(v) => setTruck("gross", v)} suffix="kg" placeholder="31840" /></F>
+        <F label="B · Empty truck" hint="After unloading" err={bad ? "Must be less than A" : undefined}><NumIn value={w.tare ?? 0} onChange={(v) => setTruck("tare", v)} suffix="kg" placeholder="13920" /></F>
+        {fromTruck ? (
+          <F label="Stone weight · A − B" box>
+            <div className={`field num flex items-center justify-between font-semibold ${bad ? "text-ink-3" : ""}`}>{block.tonnes && !bad ? n2(block.tonnes) : "—"}<span className="text-[0.8rem] font-normal text-ink-3">t</span></div>
+          </F>
+        ) : (
+          <F label="Stone weight" hint="Or type the net from the slip"><NumIn value={block.tonnes} onChange={(v) => onChange({ tonnes: v })} suffix="t" /></F>
+        )}
+      </Grid>
+
+      {reading && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-surface px-3.5 py-2.5 text-[0.86rem]">
+          <Scale size={15} className="text-accent" />
+          <span>Weighbridge now <b className="num">{n0(reading.weight)} kg</b>{reading.device ? <span className="text-ink-3"> · {reading.device}</span> : null}</span>
+          <span className="ml-auto flex gap-1.5">
+            <button type="button" className="btn btn-quiet btn-sm" onClick={() => setTruck("gross", reading.weight, "weighbridge")}>Use for A</button>
+            <button type="button" className="btn btn-quiet btn-sm" onClick={() => setTruck("tare", reading.weight, "weighbridge")}>Use for B</button>
+          </span>
+        </div>
       )}
-      {manual && (
-        <Grid cols={3}>
-          <F label="Truck with the block"><NumIn value={w.gross ?? 0} onChange={(v) => apply({ ...w, source: "manual", gross: v || undefined })} suffix="kg" /></F>
-          <F label="Empty truck"><NumIn value={w.tare ?? 0} onChange={(v) => apply({ ...w, source: "manual", tare: v || undefined })} suffix="kg" /></F>
-          <F label="Net"><div className="field num">{net ? `${n2(net)} t` : "—"}</div></F>
-        </Grid>
-      )}
-      <div className="mt-3 flex flex-wrap items-center gap-3 text-[0.86rem]">
-        {net > 0 && <span className="font-medium">Net {n2(net)} t {w.source === "weighbridge" ? <span className="text-accent">· from the weighbridge</span> : <span className="text-ink-3">· typed by hand</span>}</span>}
-        <button type="button" className="ml-auto text-accent hover:underline" onClick={() => setManual((m) => !m)}>{manual ? "Use the weighbridge" : "Type the weights instead"}</button>
-      </div>
+
+      <Grid cols={3}>
+        <F label="Supplier's weight" hint="As on the bill / rawanna"><NumIn value={block.billedTonnes} onChange={(v) => onChange({ billedTonnes: v })} suffix="t" /></F>
+        <F label="Slip no."><TextIn value={block.weighSlip} onChange={(v) => onChange({ weighSlip: v })} upper /></F>
+      </Grid>
+
+      <WeightVerdict check={check} received={block.tonnes} quoted={block.billedTonnes} rate={ctx.costs ? block.rate : 0} />
     </div>
   );
 }
 
-function WeighStep({ n, title, value, at, disabled, onTake, hint }: { n: number; title: string; value?: number; at?: string; disabled: boolean; onTake: () => void; hint?: string }) {
+/** Received vs quoted, on a ±10% scale with the ±5% band that passes. */
+export function WeightVerdict({ check, received, quoted, rate }: { check: WeightCheck | null; received: number; quoted: number; rate?: number }) {
+  if (!check) return <p className="text-[0.84rem] text-ink-3">Enter the stone weight and the supplier&apos;s weight to cross-check them. More than ±5% apart gets flagged.</p>;
+  const pos = Math.max(0, Math.min(100, 50 + (check.pct / 0.1) * 50));
+  const tone = check.flag ? "bg-neg-soft" : "bg-accent-soft";
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-surface px-3.5 py-3">
-      <span className={`num grid h-6 w-6 shrink-0 place-items-center rounded-full text-[0.75rem] font-semibold ${value ? "bg-accent text-accent-ink" : "bg-surface-2 text-ink-2"}`}>{n}</span>
-      <div className="min-w-0 flex-1">
-        <div className="text-[0.88rem] font-medium">{title}</div>
-        <div className="num text-[0.8rem] text-ink-3">{value ? `${n0(value)} kg · ${time(at)}` : hint ?? "Not taken yet"}</div>
+    <div className={`rounded-2xl px-4 py-3.5 ${tone}`}>
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        {check.flag ? <AlertTriangle size={15} className="shrink-0 self-center text-neg" /> : <Check size={15} className="shrink-0 self-center text-accent" />}
+        <span className="font-semibold">
+          {check.flag === "short" ? `Flagged: ${n2(-check.diff)} t short` : check.flag === "over" ? `Flagged: ${n2(check.diff)} t more than quoted` : "Matches the supplier's weight"}
+        </span>
+        <span className="num text-[0.86rem] text-ink-2">{pct1(check.pct)} · limit ±5%</span>
       </div>
-      <button type="button" className={`btn btn-sm ${value ? "btn-quiet" : "btn-primary"}`} disabled={disabled} onClick={onTake}>{value ? "Again" : "Take weight"}</button>
+      <div className="mt-3" aria-hidden>
+        <div className="relative h-2 rounded-full bg-ink/10">
+          <div className="absolute inset-y-0 left-1/4 right-1/4 rounded-full bg-accent/35" />
+          <div className="absolute left-1/2 top-1/2 h-3 w-px -translate-y-1/2 bg-ink/30" />
+          <div className={`absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-ground ${check.flag ? "bg-neg" : "bg-accent"}`} style={{ left: `${pos}%` }} />
+        </div>
+        <div className="num mt-1.5 flex justify-between text-[0.72rem] text-ink-3"><span>−10%</span><span>−5%</span><span>0</span><span>+5%</span><span>+10%</span></div>
+      </div>
+      <p className="mt-2 text-[0.84rem] text-ink-2">
+        Supplier quoted <b className="num text-ink">{n2(quoted)} t</b>, the unit received <b className="num text-ink">{n2(received)} t</b>.
+        {check.flag === "short" && <> The supplier billed for stone the unit didn&apos;t get{rate ? <>: about <b className="text-ink">{rs(-check.diff * rate)}</b></> : null}. Raise a debit note; it&apos;s listed under Weight flags.</>}
+        {check.flag === "over" && <> Check the slip and the supplier&apos;s bill before accepting; it&apos;s listed under Weight flags.</>}
+      </p>
     </div>
   );
 }
@@ -144,8 +146,8 @@ export function WeighbridgeSettings({ ctx }: { ctx: Ctx }) {
   const [more, setMore] = useState(false);
   return (
     <Section title="Weighbridge">
-      <p className="-mt-1 mb-3 text-[0.9rem] text-ink-2">Show the live weight on the gate screen. The gate person presses one button for the loaded truck and one for the empty truck; the net weight is filled in and can’t be mistyped.</p>
-      {ctx.mode === "demo" ? <Note>In the demo the weighbridge is simulated. Open Processing unit → Block yard → Receive on a block that is on the road to try it.</Note> : (
+      <p className="-mt-1 mb-3 text-[0.9rem] text-ink-2">Optional. Weights can always be typed in by hand. With the weighbridge connected, the gate screen shows its live reading and one tap fills in the loaded (A) or empty (B) truck weight.</p>
+      {ctx.mode === "demo" ? <Note>In the demo, weights are typed in by hand: open Processing unit → Block yard → Receive on a block that is on the road. With a weighbridge connected, the gate screen offers its live reading for A and B.</Note> : (
         <div className="space-y-4">
           <WeightReadout live={live} compact />
           <ol className="space-y-3 rounded-2xl bg-surface p-4 text-[0.9rem] text-ink-2">
