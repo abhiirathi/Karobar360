@@ -20,7 +20,7 @@ export const multiFirm = (s: StoneSettings | undefined) => firmsOf(s).length > 1
 export const firmOf = (x: { firmId?: string }, s: StoneSettings) => x.firmId || firmsOf(s)[0]?.id || "";
 export const firmName = (s: StoneSettings, id: string) => firmsOf(s).find((f) => f.id === id)?.name ?? "—";
 
-const SCOPED = ["blocks", "lots", "sales", "mineCosts", "jobs", "shipments", "damages"] as const;
+const SCOPED = ["blocks", "lots", "sales", "mineCosts", "jobs", "shipments", "damages", "labour"] as const;
 
 /** What one firm sees: its own records, and its own name, GSTIN and sections on every screen and invoice. */
 export function scope(db: StoneDB, firmId: string | null): StoneDB {
@@ -35,7 +35,7 @@ export function scope(db: StoneDB, firmId: string | null): StoneDB {
   const f = firms.find((x) => x.id === firmId);
   if (!f) return db;
   const out = { ...db } as StoneDB;
-  for (const k of SCOPED) (out as unknown as Record<string, { firmId?: string }[]>)[k] = (db[k] as { firmId?: string }[]).filter((x) => firmOf(x, db.settings) === f.id);
+  for (const k of SCOPED) (out as unknown as Record<string, { firmId?: string }[]>)[k] = ((db[k] ?? []) as { firmId?: string }[]).filter((x) => firmOf(x, db.settings) === f.id);
   out.tally = tallyOfFirm(db, f);
   out.settings = { ...db.settings, company: f.name, gstin: f.gstin, address: f.address, city: f.city, state: f.state, pincode: f.pincode, phone: f.phone || db.settings.phone, invoicePrefix: f.invoicePrefix, modules: f.modules };
   return out;
@@ -44,8 +44,8 @@ export function scope(db: StoneDB, firmId: string | null): StoneDB {
 /** Stamps records created while a firm is selected with that firm. */
 export function tagNew(before: StoneDB, after: StoneDB, firmId: string) {
   for (const k of SCOPED) {
-    const old = new Set((before[k] as { id: string }[]).map((x) => x.id));
-    for (const x of after[k] as { id: string; firmId?: string }[]) if (!old.has(x.id) && !x.firmId) x.firmId = firmId;
+    const old = new Set(((before[k] ?? []) as { id: string }[]).map((x) => x.id));
+    for (const x of (after[k] ?? []) as { id: string; firmId?: string }[]) if (!old.has(x.id) && !x.firmId) x.firmId = firmId;
   }
 }
 

@@ -1,8 +1,8 @@
 // Who can see and change what. Shared by the browser and the server; the server is the one that enforces it.
 
 export type Level = "none" | "view" | "edit";
-export type AreaKey = "quarry" | "blocks" | "processing" | "stores" | "stock" | "sales" | "trade" | "parties" | "tally" | "settings";
-export type Section = "settings" | "parties" | "blocks" | "mineCosts" | "jobs" | "lots" | "damages" | "shipments" | "sales" | "tally" | "tallyCfg" | "stores";
+export type AreaKey = "quarry" | "blocks" | "processing" | "stores" | "stock" | "sales" | "trade" | "parties" | "tally" | "settings" | "labour";
+export type Section = "settings" | "parties" | "blocks" | "mineCosts" | "jobs" | "lots" | "damages" | "shipments" | "sales" | "tally" | "tallyCfg" | "stores" | "labour";
 
 export interface Perms {
   areas: Partial<Record<AreaKey, Level>>;
@@ -29,6 +29,7 @@ export const AREAS: { key: AreaKey; label: string; hint: string }[] = [
   { key: "blocks", label: "Blocks and purchases", hint: "Block purchases, gate receiving, weighbridge, photos, QR labels" },
   { key: "processing", label: "Sawing and processing", hint: "Load on saw, slabs out, trolley damage" },
   { key: "stores", label: "Stores", hint: "Epoxy, resin, polish, abrasives, blades, spares: receive and issue" },
+  { key: "labour", label: "Labour attendance", hint: "Worker list and daily attendance; wages only with costs" },
   { key: "stock", label: "Slab inventory", hint: "Lots at unit and depot, racks, catalogue photos, slab purchases" },
   { key: "sales", label: "Sales", hint: "Invoices, payments, e-invoice and e-way bill" },
   { key: "trade", label: "Import and export", hint: "Shipments, bill of lading, landed cost" },
@@ -37,7 +38,7 @@ export const AREAS: { key: AreaKey; label: string; hint: string }[] = [
   { key: "settings", label: "Company settings", hint: "Rates, royalty, invoice format, catalogue" },
 ];
 
-export const ALL_SECTIONS: Section[] = ["settings", "parties", "blocks", "mineCosts", "jobs", "lots", "damages", "shipments", "sales", "tally", "tallyCfg", "stores"];
+export const ALL_SECTIONS: Section[] = ["settings", "parties", "blocks", "mineCosts", "jobs", "lots", "damages", "shipments", "sales", "tally", "tallyCfg", "stores", "labour"];
 
 /** Data each area reads, and the part of it the area may change. */
 const AREA_SECTIONS: Record<AreaKey, { rw: Section[]; r: Section[] }> = {
@@ -51,6 +52,7 @@ const AREA_SECTIONS: Record<AreaKey, { rw: Section[]; r: Section[] }> = {
   parties: { rw: ["parties"], r: [] },
   tally: { rw: ["tallyCfg"], r: ["tally", "sales", "parties", "blocks", "lots", "stores"] },
   settings: { rw: ["settings"], r: [] },
+  labour: { rw: ["labour"], r: [] },
 };
 
 const ALL_EDIT: Perms = { areas: Object.fromEntries(AREAS.map((a) => [a.key, "edit"])) as Perms["areas"], costs: true, team: true };
@@ -59,7 +61,7 @@ export const ROLES: { key: string; label: string; blurb: string; perms: Perms }[
   { key: "manager", label: "Manager / partner", blurb: "Everything, including adding people", perms: ALL_EDIT },
   {
     key: "accountant", label: "Accountant / munim", blurb: "Invoices, payments, parties, Tally; sees costs",
-    perms: { areas: { sales: "edit", parties: "edit", tally: "edit", stock: "view", blocks: "view", stores: "view", trade: "view", quarry: "view", settings: "view" }, costs: true, team: false },
+    perms: { areas: { sales: "edit", parties: "edit", tally: "edit", stock: "view", blocks: "view", stores: "view", trade: "view", quarry: "view", settings: "view", labour: "view" }, costs: true, team: false },
   },
   {
     key: "sales", label: "Sales", blurb: "Sees slab stock and invoices; makes invoices",
@@ -74,16 +76,16 @@ export const ROLES: { key: string; label: string; blurb: string; perms: Perms }[
     perms: { areas: { blocks: "edit" }, costs: false, team: false },
   },
   {
-    key: "yard", label: "Yard and saw supervisor", blurb: "Block yard, saws, slabs out, damage, issues from stores",
-    perms: { areas: { blocks: "edit", processing: "edit", stores: "edit", stock: "view" }, costs: false, team: false },
+    key: "yard", label: "Yard and saw supervisor", blurb: "Block yard, saws, slabs out, damage, stores, labour attendance",
+    perms: { areas: { blocks: "edit", processing: "edit", stores: "edit", stock: "view", labour: "edit" }, costs: false, team: false },
   },
   {
     key: "storekeeper", label: "Store keeper", blurb: "Receives and issues epoxy, resin, polish, blades and spares",
     perms: { areas: { stores: "edit", parties: "view" }, costs: false, team: false },
   },
   {
-    key: "quarry", label: "Quarry supervisor", blurb: "Own quarry blocks and running costs",
-    perms: { areas: { quarry: "edit", stores: "edit" }, costs: true, team: false },
+    key: "quarry", label: "Quarry supervisor", blurb: "Own quarry blocks, running costs and labour attendance",
+    perms: { areas: { quarry: "edit", stores: "edit", labour: "edit" }, costs: true, team: false },
   },
   {
     key: "imports", label: "Import / CHA desk", blurb: "Shipments, BL, landed cost",
@@ -120,6 +122,7 @@ export const COST_FIELDS: Partial<Record<Section, string[]>> = {
   blocks: ["rate", "royalty", "dmft", "freight", "loading", "otherCost", "importCost", "damageAlloc", "imp"],
   lots: ["cost"],
   jobs: ["power", "blades", "resin", "netting", "polishing", "labour", "other"],
+  labour: ["rate"],
 };
 
 /** A manager can hand out at most what they have. Only the owner can let others manage the team. */

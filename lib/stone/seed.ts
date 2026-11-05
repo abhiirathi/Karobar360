@@ -1,7 +1,7 @@
 import { baseCost, cbm, gstinCheckChar, spreadDamage } from "./calc";
 import { presetModules } from "./modules";
 import { slabNo, syncLot } from "./slabs";
-import type { StoreItem, StoreMove, Block, DamageEvent, MineCost, Party, Sale, SawJob, Shipment, SlabLot, StoneDB, StoneSettings } from "./types";
+import type { StoreItem, StoreMove, Block, DamageEvent, MineCost, Party, Sale, SawJob, Shipment, SlabLot, StoneDB, StoneSettings, Worker, Mark } from "./types";
 
 // Sample company: a gang-saw unit in Kishangarh with its own quarry near Rajsamand.
 // Every figure is sample data, built relative to today so the screens always look current.
@@ -379,7 +379,41 @@ export function seed(): StoneDB {
   };
   const db: StoneDB = { v: 1, settings: S, parties, blocks, mineCosts, jobs, lots, damages: [dmg], shipments, sales, stores: { items, moves }, tally };
   group(db);
+  db.labour = seedLabour(db.settings);
   return db;
+}
+
+/** Sample workers at the unit and the quarry, with attendance for the last 45 days. */
+export function seedLabour(S: StoneSettings): Worker[] {
+  const r = rng(77);
+  const firms = S.firms ?? [];
+  const unit = firms.find((f) => f.kind === "processing")?.id;
+  const mine = firms.find((f) => f.kind === "mine")?.id;
+  const people: [string, string, string, "day" | "month", number, string | undefined][] = [
+    ["Ramesh Kumawat", "Gang saw operator", "Unit", "month", 18000, unit],
+    ["Suresh Gurjar", "Gang saw operator", "Unit", "month", 17000, unit],
+    ["Mohan Lal Meena", "Block cutter operator", "Unit", "day", 650, unit],
+    ["Bhanwar Singh", "Polisher", "Unit", "day", 600, unit],
+    ["Kailash Regar", "Resin / epoxy", "Unit", "day", 620, unit],
+    ["Shankar Bhil", "Loader / crane", "Unit", "day", 550, unit],
+    ["Gopal Prajapat", "Helper", "Unit", "day", 450, unit],
+    ["Raju Salvi", "Helper", "Unit", "day", 450, unit],
+    ["Dinesh Rawat", "Wire saw operator", "Mine", "day", 700, mine],
+    ["Hemraj Bhati", "Excavator operator", "Mine", "month", 22000, mine],
+    ["Prakash Dangi", "Driller", "Mine", "day", 600, mine],
+  ];
+  const today = new Date();
+  return people.map(([name, trade, site, wageType, rate, firmId], i) => {
+    const att: Record<string, Mark> = {};
+    for (let k = 1; k <= 45; k++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - k);
+      if (d.getDay() === 0) continue; // Sunday off
+      const x = r();
+      att[d.toISOString().slice(0, 10)] = x < 0.84 ? "P" : x < 0.92 ? "H" : "A";
+    }
+    return { id: `w${i + 1}`, name, phone: `98${String(29000000 + i * 137731).slice(0, 8)}`, trade, site, wageType, rate, joinedOn: "2025-04-01", active: true, notes: "", firmId, att };
+  });
 }
 
 /** The sample company runs as three firms: the quarry company, the processing unit and the depot. */

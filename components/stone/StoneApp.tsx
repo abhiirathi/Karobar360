@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BookOpenCheck, Boxes, Building2, Check, ChevronDown, ChevronsUpDown, Globe, IndianRupee, LifeBuoy, Factory, ReceiptText, LayoutDashboard, LogOut, Mountain, Package, Settings, ShoppingCart, UserCog, Users } from "lucide-react";
+import { BookOpenCheck, Boxes, Building2, Check, ChevronDown, ChevronsUpDown, Globe, IndianRupee, LifeBuoy, Factory, ReceiptText, HardHat, LayoutDashboard, LogOut, Mountain, Package, Settings, ShoppingCart, UserCog, Users } from "lucide-react";
 import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useStone, type StoneMode } from "@/lib/stone/store";
@@ -14,6 +14,7 @@ import Inventory from "./Inventory";
 import Unit from "./Unit";
 import Depot from "./Depot";
 import StoresView from "./Stores";
+import Labour from "./Labour";
 import Purchases from "./Purchases";
 import Parties from "./Parties";
 import SettingsView from "./SettingsView";
@@ -25,7 +26,7 @@ import Help from "./Help";
 import Services from "./Services";
 import Pricing from "@/components/Pricing";
 
-export type View = "overview" | "inventory" | "unit" | "stores" | "purchases" | "sales" | "parties" | "tally" | "team" | "settings" | "services" | "pricing" | "help" | "scan";
+export type View = "overview" | "inventory" | "unit" | "stores" | "purchases" | "sales" | "parties" | "tally" | "team" | "settings" | "services" | "pricing" | "help" | "scan" | "labour";
 
 /** Sections that were merged into others; old links still land in the right place. */
 const MOVED: Record<string, [View, string]> = { mines: ["inventory", "blocks"], depot: ["inventory", "slabs"], trade: ["purchases", "import"], trace: ["inventory", "blocks"] };
@@ -77,6 +78,7 @@ export function navFor(mods: Modules, can: (a: AreaKey) => Level, perms: Perms):
     { key: "inventory", label: "Inventory", icon: Boxes, show: blocksOn || slabsOn, children: [{ sub: "blocks", label: "Blocks", show: blocksOn }, { sub: "slabs", label: "Slabs", show: slabsOn }] },
     { key: "unit", label: "Manufacturing unit", icon: Factory, show: mods.processing && (v("blocks") || v("processing")) },
     { key: "stores", label: "Stores", icon: Package, show: mods.stores && v("stores") },
+    { key: "labour", label: "Labour", icon: HardHat, show: v("labour") && (mods.processing || mods.quarry || mods.stores) },
     { key: "purchases", label: "Purchases", icon: ShoppingCart, show: buyOn },
     { key: "sales", label: "Sales", icon: ReceiptText, show: v("sales") },
     { key: "parties", label: "Masters", icon: Users, show: v("parties"), children: masterKinds(mods) },
@@ -150,7 +152,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
 
   const fUpdate = (fn: (d: StoneDB) => void) => update((d) => {
     if (!firm) { fn(d); return; }
-    const before = { ...d, blocks: [...d.blocks], lots: [...d.lots], sales: [...d.sales], mineCosts: [...d.mineCosts], jobs: [...d.jobs], shipments: [...d.shipments], damages: [...d.damages] };
+    const before = { ...d, blocks: [...d.blocks], lots: [...d.lots], sales: [...d.sales], mineCosts: [...d.mineCosts], jobs: [...d.jobs], shipments: [...d.shipments], damages: [...d.damages], labour: [...(d.labour ?? [])] };
     fn(d);
     tagNew(before, d, firm.id);
   });
@@ -255,6 +257,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
         {shown === "inventory" && <Inventory ctx={ctx} page={childSub === "slabs" ? "slabs" : "blocks"} key={sub || childSub} />}
         {shown === "unit" && <Unit ctx={ctx} />}
         {shown === "stores" && <StoresView ctx={ctx} />}
+        {shown === "labour" && <Labour ctx={ctx} />}
         {shown === "purchases" && <Purchases ctx={ctx} key={navN} />}
         {shown === "sales" && <Depot ctx={ctx} key={navN} />}
         {shown === "parties" && <Parties ctx={ctx} kind={(childSub || "customer") as PartyKind} key={childSub} />}

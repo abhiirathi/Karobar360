@@ -12,7 +12,7 @@ import { Drawer, F, Grid, Note, TextIn } from "./ui";
 export function areasFor(m: Modules) {
   const on: Record<AreaKey, boolean> = {
     quarry: m.quarry, blocks: hasBlocks(m), processing: m.processing, stores: m.stores, stock: m.depot || m.trading || m.processing || m.imports,
-    sales: true, trade: m.imports || m.exports, parties: true, tally: true, settings: true,
+    sales: true, trade: m.imports || m.exports, parties: true, tally: true, settings: true, labour: m.processing || m.quarry || m.stores,
   };
   return AREAS.filter((a) => on[a.key]);
 }
