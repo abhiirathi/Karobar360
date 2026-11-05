@@ -41,10 +41,19 @@ export default function FirmsSettings({ ctx }: { ctx: Ctx }) {
                   </div>
                   <div className="text-[0.82rem] text-ink-2">{c.blocks} blocks · {c.lots} lots · {c.sales} invoices</div>
                 </button>
+                <div className="flex justify-end px-4 pb-3 -mt-1">
+                  {ctx.firm?.id === f.id ? <Badge tone="good">Working in this firm</Badge> : <button className="btn btn-quiet btn-sm" onClick={() => { ctx.setFirm(f.id); ctx.go("overview"); }}>Work in this firm</button>}
+                </div>
               </li>
             );
           })}
         </ul>
+      )}
+      {firms.length > 1 && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[0.86rem] text-ink-2">
+          <span>The main account sees every firm together under <b>All firms · group view</b>, or one firm at a time from the switcher in the sidebar.</span>
+          {ctx.firm && <button className="btn btn-quiet btn-sm" onClick={() => { ctx.setFirm(null); ctx.go("overview"); }}>Show all firms</button>}
+        </div>
       )}
       {edit && <FirmForm ctx={ctx} firm={edit === "new" ? null : edit} onClose={() => setEdit(null)} used={edit !== "new" && Object.values(count(edit.id)).some(Boolean)} />}
     </Section>

@@ -54,7 +54,7 @@ export default function SettingsView({ ctx }: { ctx: Ctx }) {
       {!canEdit && <div className="mb-4"><Note>You can view these settings. Only the owner or a manager can change them.</Note></div>}
       {firm && <div className="mb-4"><Note>Settings for <b>{firm.name}</b>. Company details and sections are this firm’s own; rates and clean-up apply to every firm.</Note></div>}
       {!firm && ctx.firms.length > 1 && <div className="mb-4"><Note>You are looking at all firms. Company details below are the group’s; pick a firm in the sidebar to change its own details.</Note></div>}
-      {canEdit && !firm && <FirmsSettings ctx={ctx} />}
+      {canEdit && <FirmsSettings ctx={ctx} />}
       {(firm || ctx.firms.length < 2) && <Section title={firm ? `What ${firm.name} does` : "What your business does"}>
         <p className="-mt-1 mb-3 text-[0.9rem] text-ink-2">Sections, dashboard panels and team access follow these. Switching one off hides it; nothing is deleted.</p>
         <ul className="divide-y divide-surface-2 rounded-2xl bg-surface">

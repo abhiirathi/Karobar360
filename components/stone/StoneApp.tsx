@@ -102,6 +102,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
   const mods = useMemo(() => modulesOf(vdb?.settings), [vdb?.settings]);
   const can = (a: AreaKey) => level(perms, a);
   const nav = navFor(mods, can, perms).filter((n) => n.show);
+  const canFirms = (mode === "demo" || !!me?.isOwner) && can("settings") === "edit";
 
   if (status === "signedout") return <Auth onDone={reload} />;
   if (status === "error") {
@@ -141,16 +142,22 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
           <div className="mt-1 font-semibold leading-tight">{firm ? firm.name : db.settings.company || me?.orgName}</div>
           <div className="text-sm text-ink-2">{firm ? kindLabel(firm.kind) : firms.length > 1 ? `Group · ${firms.length} firms` : db.settings.city}</div>
         </div>
-        {firms.length > 1 && (
+        {firms.length > 1 ? (
           <div className="px-4 pb-2 pt-1 lg:px-5">
             <label className="relative block">
-              <span className="sr-only">Firm</span>
-              <Building2 size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
-              <select className="field !pl-9 text-[0.9rem] font-medium" value={firm?.id ?? ""} onChange={(e) => { setFirm(e.target.value || null); go("overview"); }}>
-                <option value="">All firms</option>
-                {firms.map((f) => <option key={f.id} value={f.id}>{f.name} · {kindLabel(f.kind)}</option>)}
-              </select>
+              <span className="mb-1 hidden text-[0.75rem] font-medium text-ink-3 lg:block">Working in</span>
+              <span className="relative block">
+                <Building2 size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
+                <select className="field !pl-9 text-[0.9rem] font-medium" value={firm?.id ?? ""} onChange={(e) => { setFirm(e.target.value || null); go("overview"); }}>
+                  <option value="">All firms · group view</option>
+                  {firms.map((f) => <option key={f.id} value={f.id}>{f.name} · {kindLabel(f.kind)}</option>)}
+                </select>
+              </span>
             </label>
+          </div>
+        ) : canFirms && (
+          <div className="hidden px-5 pb-1 lg:block">
+            <button onClick={() => go("settings", "firms")} className="inline-flex items-center gap-1.5 text-[0.82rem] font-medium text-accent hover:underline"><Building2 size={14} />Add another firm</button>
           </div>
         )}
         <nav className="scroll-thin flex gap-1 overflow-x-auto px-3 pb-3 lg:mt-2 lg:flex-col lg:overflow-visible lg:px-3" aria-label="Sections">
