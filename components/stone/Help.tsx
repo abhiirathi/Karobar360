@@ -209,6 +209,11 @@ export default function Help({ ctx }: { ctx: Ctx }) {
           <div key={w}><dt className="font-medium">{w}</dt><dd className="mt-0.5 text-[0.88rem] text-ink-2">{d}</dd></div>
         ))}
       </dl>
+
+      <div className="mt-10 flex flex-wrap items-center gap-4 rounded-2xl bg-surface px-5 py-4">
+        <div className="min-w-[220px] flex-1"><div className="font-semibold">Still stuck?</div><div className="text-[0.88rem] text-ink-2">Send us a message and we will call or WhatsApp you back.</div></div>
+        <a className="btn btn-primary btn-sm" href="/contact">Contact us</a>
+      </div>
     </div>
   );
 }

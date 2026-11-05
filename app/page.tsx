@@ -21,6 +21,7 @@ export default function Home() {
           <a href="#modules" className="hover:text-ink">Modules</a>
           <a href="#clusters" className="hover:text-ink">Samples</a>
           <a href="#pricing" className="hover:text-ink">Pricing</a>
+          <Link href="/contact" className="hover:text-ink">Contact</Link>
         </nav>
         <div className="ml-auto flex items-center gap-2">
           <ThemeToggle />
@@ -199,7 +200,8 @@ export default function Home() {
             <span className="font-semibold">Karobar360</span>
             <span>Operations software for Indian MSMEs</span>
             <span>Photographs: Unsplash</span>
-            <Link href="/w" className="ml-auto hover:underline">My dashboards</Link>
+            <Link href="/contact" className="ml-auto hover:underline">Contact us</Link>
+            <Link href="/w" className="hover:underline">My dashboards</Link>
           </div>
         </section>
       </main>

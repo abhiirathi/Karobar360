@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BookOpenCheck, Building2, Check, ChevronsUpDown, LifeBuoy, Factory, ReceiptText, Route, LayoutDashboard, LogOut, Mountain, Package, Settings, Ship, UserCog, Users, Warehouse } from "lucide-react";
+import { BookOpenCheck, Building2, Check, ChevronsUpDown, Globe, LifeBuoy, Factory, ReceiptText, Route, LayoutDashboard, LogOut, Mountain, Package, Settings, Ship, UserCog, Users, Warehouse } from "lucide-react";
 import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useStone, type StoneMode } from "@/lib/stone/store";
@@ -23,8 +23,9 @@ import Scan from "./Scan";
 import Auth from "./Auth";
 import TraceView from "./Trace";
 import Help from "./Help";
+import Services from "./Services";
 
-export type View = "overview" | "mines" | "unit" | "stores" | "depot" | "sales" | "trade" | "parties" | "trace" | "tally" | "team" | "settings" | "help" | "scan";
+export type View = "overview" | "mines" | "unit" | "stores" | "depot" | "sales" | "trade" | "parties" | "trace" | "tally" | "team" | "settings" | "services" | "help" | "scan";
 export type Ctx = {
   db: StoneDB;
   update: (fn: (d: StoneDB) => void) => void;
@@ -64,6 +65,7 @@ export function navFor(mods: Modules, can: (a: AreaKey) => Level, perms: Perms):
     { key: "tally", label: "Tally", icon: BookOpenCheck, show: v("tally") },
     { key: "team", label: "Team", icon: UserCog, show: perms.team },
     { key: "settings", label: "Settings", icon: Settings, show: v("settings") },
+    { key: "services", label: "Website and services", icon: Globe, show: perms.team || can("settings") === "edit" },
     { key: "help", label: "How to use", icon: LifeBuoy, show: true },
   ];
 }
@@ -171,7 +173,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
               <button onClick={signOut} className="mt-1.5 inline-flex items-center gap-1.5 text-ink-2 hover:text-ink"><LogOut size={13} />Sign out</button>
             </div>
           )}
-          <div className="flex items-center gap-2"><ThemeToggle /><Link href="/" className="hover:text-ink">All industries</Link></div>
+          <div className="flex items-center gap-3"><ThemeToggle />{nav.some((n) => n.key === "services") ? <button onClick={() => go("services", "contact")} className="hover:text-ink">Contact us</button> : <Link href="/contact" className="hover:text-ink">Contact us</Link>}<Link href="/" className="hover:text-ink">All industries</Link></div>
         </div>
       </aside>
 
@@ -203,6 +205,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
         {shown === "team" && <Team ctx={ctx} />}
         {shown === "settings" && <SettingsView ctx={ctx} />}
         {shown === "help" && <Help ctx={ctx} />}
+        {shown === "services" && <Services ctx={ctx} />}
         {shown === "scan" && <Scan ctx={ctx} blockId={sub} />}
       </main>
 

@@ -127,6 +127,18 @@ function local(fn: string, a: Record<string, unknown>): unknown {
       out = o && k && k.length >= 12 ? { id: o.id, name: o.name } : null;
       break;
     }
+    case "k_request_add": {
+      const r = { id: randomUUID(), kind: s("p_kind"), name: s("p_name"), company: s("p_company"), phone: s("p_phone"), email: s("p_email"), message: s("p_message"), details: a.p_details, created_at: new Date().toISOString(), emailed: false };
+      ((d as unknown as { requests?: unknown[] }).requests ??= []).push(r);
+      out = { ok: true, id: r.id };
+      break;
+    }
+    case "k_request_mark": {
+      const r = ((d as unknown as { requests?: { id: string; emailed: boolean }[] }).requests ?? []).find((x) => x.id === a.p_id);
+      if (r) r.emailed = true;
+      out = null;
+      break;
+    }
     default: throw new Error(`local db: unknown ${fn}`);
   }
   ls(d);
