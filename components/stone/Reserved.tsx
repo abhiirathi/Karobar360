@@ -1,14 +1,15 @@
 "use client";
 import { useState } from "react";
-import { FileDown, Pencil, Receipt, Send, Undo2 } from "lucide-react";
+import { FileDown, Pencil, Receipt, Send, Undo2, UserPlus } from "lucide-react";
 import { dmy, n0, n2, rs, rs2, today, uid } from "@/lib/stone/calc";
 import { lotUnit } from "@/lib/stone/costing";
 import { firmName, firmOf } from "@/lib/stone/firms";
 import { RESERVE_DAYS, addDays, byCustomer, expired, pickable, releaseReserve, reservations, reserveOf, saveReserve, type ResRow } from "@/lib/stone/reserve";
 import { slabCount } from "@/lib/stone/slabs";
+import { emptyParty } from "@/lib/stone/seed";
 import type { Party, Reservation, SlabLot } from "@/lib/stone/types";
 import type { Ctx } from "./StoneApp";
-import { Drawer, F, Grid, Note, NumIn, Sel, TextIn } from "./ui";
+import { Drawer, F, Grid, Note, NumIn, Pick, TextIn } from "./ui";
 
 const quality = (l: SlabLot) => `${l.variety} ${l.thicknessMm} mm ${l.finish}`.trim();
 
@@ -26,6 +27,21 @@ export function ReserveForm({ ctx, lot, initial, onClose }: { ctx: Ctx; lot: Sla
   const [till, setTill] = useState(initial?.till ?? addDays(today(), RESERVE_DAYS));
   const [advance, setAdvance] = useState(initial?.advance ?? 0);
   const [note, setNote] = useState(initial?.note ?? "");
+  // Quick new customer: name and WhatsApp number now, the rest later under Masters → Customers.
+  const canAdd = ctx.edit("parties") || ctx.edit("sales");
+  const [nc, setNc] = useState<{ name: string; wa: string } | null>(null);
+  const digits = (v: string) => v.replace(/\D/g, "").replace(/^91(\d{10})$/, "$1").replace(/^0(\d{10})$/, "$1");
+  const ncDup = nc && digits(nc.wa).length === 10 ? customers.find((p) => digits(p.whatsapp || "") === digits(nc.wa) || digits(p.phone || "") === digits(nc.wa)) : undefined;
+  const ncErr = !nc ? "" : ncDup ? `This number is already saved for ${ncDup.company}. Pick them from the list.` : !nc.name.trim() ? "Enter the customer's name" : digits(nc.wa).length !== 10 ? "Enter a 10-digit WhatsApp number" : "";
+  const addCustomer = () => {
+    if (!nc || ncErr) return;
+    const S = ctx.firm ?? ctx.root.settings;
+    const p = { ...emptyParty("customer"), id: uid(), company: nc.name.trim(), name: nc.name.trim(), whatsapp: digits(nc.wa), phone: digits(nc.wa), state: S.state || "08", createdAt: today() };
+    ctx.update((d) => { d.parties.push(p); });
+    ctx.say(`${p.company} added to customers. Add GSTIN and address later under Masters → Customers.`, "good");
+    setNc(null);
+    chooseCustomer(p.id);
+  };
 
   const pool = tracked ? pickable(lot, customerId) : [];
   const max = tracked ? pool.length : slabCount(lot);
@@ -64,7 +80,26 @@ export function ReserveForm({ ctx, lot, initial, onClose }: { ctx: Ctx; lot: Sla
       {cur && !initial && <div className="mb-4"><Note>{customers.find((p) => p.id === customerId)?.company} already has {cur.slabIds.length} slabs reserved in this lot. Change the count, rate or date below; it stays one reservation.</Note></div>}
       {!tracked && <div className="mb-4"><Note>This lot is stocked as {n0(lot.available)} sq ft without slab numbers. Reserving gives it {slabCount(lot)} slab records of about {n2(each)} sq ft each.</Note></div>}
       <Grid>
-        <F label="Customer" span={2}><Sel value={customerId} onChange={chooseCustomer} placeholder="Choose customer" options={customers.map((p) => ({ v: p.id, l: `${p.company}${p.city ? ` · ${p.city}` : ""}` }))} /></F>
+        <F box label="Customer" span={2} hint={customerId ? [customers.find((p) => p.id === customerId)?.city, customers.find((p) => p.id === customerId)?.whatsapp || customers.find((p) => p.id === customerId)?.phone].filter(Boolean).join(" · ") || undefined : undefined}>
+          <Pick align="left" onPick={chooseCustomer} placeholder={customers.find((p) => p.id === customerId)?.company ?? "Choose customer"} search="Search name, city or mobile…" empty="No customer matches"
+            onAdd={canAdd ? (q) => setNc({ name: /^[\d\s+]+$/.test(q) ? "" : q, wa: /^[\d\s+]+$/.test(q) ? q : "" }) : undefined} addLabel="Add new customer"
+            options={customers.map((p) => ({ v: p.id, l: p.company, sub: [p.city, p.whatsapp || p.phone].filter(Boolean).join(" · "), find: `${p.name} ${p.phone} ${p.whatsapp} ${p.gstin}` }))} />
+        </F>
+        {nc && (
+          <div className="rounded-2xl border border-surface-3 bg-surface p-4 sm:col-span-2">
+            <div className="flex items-center gap-2 font-medium"><UserPlus size={16} />New customer</div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <F label="Customer name"><TextIn value={nc.name} onChange={(v) => setNc({ ...nc, name: v })} placeholder="Firm or person's name" /></F>
+              <F label="WhatsApp mobile"><TextIn type="tel" value={nc.wa} onChange={(v) => setNc({ ...nc, wa: v })} placeholder="98290 12345" /></F>
+            </div>
+            <p className="mt-2 text-[0.8rem] text-ink-3">GSTIN, address and credit days can be added later under Masters → Customers.</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(ncErr)} onClick={addCustomer}>Add customer</button>
+              <button type="button" className="btn btn-quiet btn-sm" onClick={() => setNc(null)}>Cancel</button>
+              {ncErr && <span className="text-[0.84rem] text-ink-3">{ncErr}</span>}
+            </div>
+          </div>
+        )}
         <F label="No. of slabs" hint={cur ? `${max} available, incl. this reservation` : `${max} free in this lot`}><NumIn value={count} onChange={setN} /></F>
         <F label="Sq ft" hint={tracked ? "For this many slabs" : "At the lot's average slab size"}><div className="field num">{n2(sqft)}</div></F>
         <F label="Rate" hint={lot.listRate ? `List ${rs(lot.listRate)}` : undefined}><NumIn value={rate} onChange={setRate} suffix="₹/sq ft" /></F>
