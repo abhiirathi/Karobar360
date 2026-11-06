@@ -5,7 +5,7 @@ import { dmy, n0, n2, rs, rs2, today, uid } from "@/lib/stone/calc";
 import { lotUnit } from "@/lib/stone/costing";
 import { firmName, firmOf } from "@/lib/stone/firms";
 import { RESERVE_DAYS, addDays, byCustomer, expired, pickable, releaseReserve, reservations, reserveOf, saveReserve, type ResRow } from "@/lib/stone/reserve";
-import { slabCount, slabRange } from "@/lib/stone/slabs";
+import { slabCount } from "@/lib/stone/slabs";
 import type { Party, Reservation, SlabLot } from "@/lib/stone/types";
 import type { Ctx } from "./StoneApp";
 import { Drawer, F, Grid, Note, NumIn, Sel, TextIn } from "./ui";
@@ -47,7 +47,6 @@ export function ReserveForm({ ctx, lot, initial, onClose }: { ctx: Ctx; lot: Sla
     if (tracked) { const p = pickable(lot, v); const keep = ids.filter((id) => p.some((s) => s.id === id)); setIds(keep.length ? keep : p.slice(0, Math.max(1, count)).map((s) => s.id)); }
   };
   const setN = (v: number) => { const k = Math.max(0, Math.min(max, Math.round(v))); setCount(k); if (tracked) setIds(lowest(k, ids)); };
-  const flip = (id: string) => { const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]; setIds(next); setCount(next.length); };
 
   const err = !customerId ? "Choose a customer" : n < 1 ? "Reserve at least one slab" : n > max ? `Only ${max} slabs free in this lot` : !till ? "Set the date it is reserved till" : rate <= 0 ? "Enter the rate per sq ft" : "";
   const save = () => {
@@ -62,12 +61,12 @@ export function ReserveForm({ ctx, lot, initial, onClose }: { ctx: Ctx; lot: Sla
     <Drawer open title={cur ? `Reservation · lot ${lot.lotNo}` : `Reserve from lot ${lot.lotNo}`} sub={`${quality(lot)} · grade ${lot.grade} · ${lot.site === "depot" ? "depot" : "unit"} ${lot.location}${C ? ` · cost ${rs2(lotUnit(ctx.root, lot))}/sq ft` : ""}`} onClose={onClose}
       footer={<><button className="btn btn-primary" disabled={Boolean(err)} onClick={save}>{cur ? "Save reservation" : "Reserve"}</button><button className="btn btn-quiet" onClick={onClose}>Cancel</button>{err && <span className="text-sm text-ink-3">{err}</span>}
         {cur && <button className="btn btn-quiet btn-sm ml-auto !text-neg" onClick={release}><Undo2 size={14} />Release all</button>}</>}>
-      {cur && !initial && <div className="mb-4"><Note>{customers.find((p) => p.id === customerId)?.company} already has {cur.slabIds.length} slabs reserved in this lot. Change them below: slabs you add join the same reservation.</Note></div>}
+      {cur && !initial && <div className="mb-4"><Note>{customers.find((p) => p.id === customerId)?.company} already has {cur.slabIds.length} slabs reserved in this lot. Change the count, rate or date below; it stays one reservation.</Note></div>}
       {!tracked && <div className="mb-4"><Note>This lot is stocked as {n0(lot.available)} sq ft without slab numbers. Reserving gives it {slabCount(lot)} slab records of about {n2(each)} sq ft each.</Note></div>}
       <Grid>
         <F label="Customer" span={2}><Sel value={customerId} onChange={chooseCustomer} placeholder="Choose customer" options={customers.map((p) => ({ v: p.id, l: `${p.company}${p.city ? ` · ${p.city}` : ""}` }))} /></F>
         <F label="No. of slabs" hint={cur ? `${max} available, incl. this reservation` : `${max} free in this lot`}><NumIn value={count} onChange={setN} /></F>
-        <F label="Sq ft" hint={tracked ? "Sum of the slabs picked" : "At the lot's average slab size"}><div className="field num">{n2(sqft)}</div></F>
+        <F label="Sq ft" hint={tracked ? "For this many slabs" : "At the lot's average slab size"}><div className="field num">{n2(sqft)}</div></F>
         <F label="Rate" hint={lot.listRate ? `List ${rs(lot.listRate)}` : undefined}><NumIn value={rate} onChange={setRate} suffix="₹/sq ft" /></F>
         <F label="Amount" hint="Before GST"><div className="field num">{rs(sqft * rate)}</div></F>
         <F label="Reserved on"><div className="field num">{dmy(cur?.on ?? today())}</div></F>
@@ -75,19 +74,6 @@ export function ReserveForm({ ctx, lot, initial, onClose }: { ctx: Ctx; lot: Sla
         <F label="Advance received" hint="Optional"><NumIn value={advance} onChange={setAdvance} suffix="₹" /></F>
         <F label="Note"><TextIn value={note} onChange={setNote} placeholder="Lifting after Diwali" /></F>
       </Grid>
-      {tracked && (
-        <div className="mt-4">
-          <div className="mb-1.5 text-[0.84rem] text-ink-2">Slabs reserved: the lowest numbers are picked. Tap to swap.</div>
-          <div className="flex flex-wrap gap-1.5">
-            {pool.map((s) => (
-              <button key={s.id} type="button" className="chip num" data-on={picked.includes(s.id)} onClick={() => flip(s.id)} title={s.l && s.w ? `${s.l} × ${s.w} cm · grade ${s.grade}` : `Grade ${s.grade}`}>
-                {s.no.split("/").pop()} · {n2(s.sqft)}
-              </button>
-            ))}
-            {!pool.length && <span className="text-[0.84rem] text-ink-3">No free slabs in this lot.</span>}
-          </div>
-        </div>
-      )}
     </Drawer>
   );
 }
@@ -112,13 +98,12 @@ export function ReservedList({ ctx, onEdit }: { ctx: Ctx; onEdit: (lot: SlabLot,
 
   const lines = (items: ResRow[], showCustomer: boolean) => (
     <div className="scroll-thin overflow-x-auto">
-      <table className="w-full min-w-[820px] text-left text-[0.88rem]">
+      <table className="w-full min-w-[720px] text-left text-[0.88rem]">
         <thead>
           <tr className="text-[0.76rem] text-ink-3">
             {showCustomer && <th className="px-4 py-2 font-medium">Customer</th>}
             <th className={`py-2 font-medium ${showCustomer ? "px-3" : "px-4"}`}>Lot</th>
             <th className="px-3 py-2 font-medium">Quality</th>
-            <th className="px-3 py-2 font-medium">Slab nos.</th>
             <th className="px-3 py-2 text-right font-medium">Slabs</th>
             <th className="px-3 py-2 text-right font-medium">Sq ft</th>
             <th className="px-3 py-2 text-right font-medium">Rate</th>
@@ -137,7 +122,6 @@ export function ReservedList({ ctx, onEdit }: { ctx: Ctx; onEdit: (lot: SlabLot,
                 {showCustomer && <td className="px-4 py-2.5 font-medium">{party(x.r.customerId)?.company ?? "—"}</td>}
                 <td className={`py-2.5 font-medium ${showCustomer ? "px-3" : "px-4"}`}>{x.lot.lotNo}{ctx.firms.length > 1 && !ctx.firm && <span className="block text-[0.78rem] font-normal text-ink-3">{firmName(R.settings, firmOf(x.lot, R.settings))}</span>}</td>
                 <td className="px-3 py-2.5">{quality(x.lot)}<span className="block text-[0.78rem] text-ink-3">grade {x.lot.grade} · {x.lot.site === "depot" ? "depot" : "unit"} {x.lot.location}</span></td>
-                <td className="num px-3 py-2.5">{slabRange(x.slabs.map((s) => s.no))}</td>
                 <td className="num px-3 py-2.5 text-right">{x.slabs.length}</td>
                 <td className="num px-3 py-2.5 text-right">{n2(x.sqft)}</td>
                 <td className="num px-3 py-2.5 text-right">{rs(x.r.rate)}</td>
@@ -238,26 +222,24 @@ async function slipPdf(ctx: Ctx, p: Party | undefined, items: ResRow[]) {
   y += 18;
 
   // columns: x positions and widths in mm
-  const col = { n: L, q: L + 7, s: L + 55, c: L + 95, f: L + 112, r: L + 134, a: L + 158, t: L + W };
+  const col = { n: L, q: L + 7, c: L + 95, f: L + 112, r: L + 134, a: L + 158, t: L + W };
   const header = () => {
     doc.setFillColor(238, 240, 236); doc.rect(L, y - 4.5, W, 7, "F");
     doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
-    doc.text("#", col.n + 1, y); doc.text("Quality / lot", col.q, y); doc.text("Slab nos.", col.s, y);
+    doc.text("#", col.n + 1, y); doc.text("Quality / lot", col.q, y);
     doc.text("Slabs", col.c + 12, y, { align: "right" }); doc.text("Sq ft", col.f + 18, y, { align: "right" });
     doc.text("Rate Rs/sq ft", col.r + 20, y, { align: "right" }); doc.text("Amount Rs", col.a + 20, y, { align: "right" });
     y += 7; doc.setFont("helvetica", "normal"); doc.setFontSize(9);
   };
   header();
   items.forEach((x, i) => {
-    const q = doc.splitTextToSize(`${quality(x.lot)}`, 46);
+    const q = doc.splitTextToSize(`${quality(x.lot)}`, 82);
     const sub = `Lot ${x.lot.lotNo} · grade ${x.lot.grade} · till ${dmy(x.r.till)}`;
-    const nos = doc.splitTextToSize(slabRange(x.slabs.map((s) => s.no)), 37);
-    const h = Math.max(q.length + 1, nos.length) * 4.4 + 2;
+    const h = (q.length + 1) * 4.4 + 2;
     if (y + h > 275) { doc.addPage(); y = 20; header(); }
     doc.text(String(i + 1), col.n + 1, y);
     doc.text(q, col.q, y);
     doc.setFontSize(8); doc.setTextColor(110); doc.text(sub, col.q, y + q.length * 4.4); doc.setTextColor(0); doc.setFontSize(9);
-    doc.text(nos, col.s, y);
     doc.text(String(x.slabs.length), col.c + 12, y, { align: "right" });
     doc.text(n2(x.sqft), col.f + 18, y, { align: "right" });
     doc.text(inr(x.r.rate), col.r + 20, y, { align: "right" });
