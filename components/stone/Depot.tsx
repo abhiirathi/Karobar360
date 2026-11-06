@@ -6,7 +6,7 @@ import { lotUnit, qualities } from "@/lib/stone/costing";
 import { inStock } from "@/lib/stone/godowns";
 import { PORTS, checks, eInvoice, eWayBill } from "@/lib/stone/gst";
 import type { Block, Party, Sale, SaleLine, SlabLot, StoneDB } from "@/lib/stone/types";
-import { slabCount, slabRange, syncLot } from "@/lib/stone/slabs";
+import { slabCount, syncLot } from "@/lib/stone/slabs";
 import { freeCount, reservations, reservedMap, sellableSqft, sellableTo, tidyReserves } from "@/lib/stone/reserve";
 import type { Ctx } from "./StoneApp";
 import { STATUS_LABEL } from "./BlockForm";
@@ -171,7 +171,7 @@ export function BuyForm({ ctx, onClose }: { ctx: Ctx; onClose: () => void }) {
       footer={<><button className="btn btn-primary" disabled={Boolean(err)} onClick={save}>Add to stock</button><button className="btn btn-quiet" onClick={onClose}>Cancel</button>{err && <span className="text-sm text-ink-3">{err}</span>}</>}>
       <Section title="Supplier bill">
         <Grid cols={3}>
-          <F label="Supplier" span={2}><Sel value={f.supplierId} onChange={(v) => set("supplierId", v)} placeholder="Choose supplier" options={suppliers.map((p) => ({ v: p.id, l: `${p.company} · ${p.city}` }))} /></F>
+          <F label="Supplier" span={2}><Sel value={f.supplierId} onChange={(v) => set("supplierId", v)} placeholder="Choose supplier" options={suppliers.map((p) => ({ v: p.id, l: `${p.company}${p.city ? ` · ${p.city}` : ""}` }))} /></F>
           <F label="Bill no."><TextIn value={f.invoiceNo} onChange={(v) => set("invoiceNo", v)} upper /></F>
           <F label="Bill date"><TextIn type="date" value={f.date} onChange={(v) => set("date", v)} /></F>
           <F label="GST on bill"><NumIn value={f.gstRate} onChange={(v) => set("gstRate", v)} suffix="%" /></F>
@@ -217,30 +217,27 @@ function take(d: StoneDB, l: SaleLine, saleId: string) {
   else lot.available -= l.sqft;
 }
 
-/** Tick the exact slabs going on the truck. */
-function SlabPick({ lot, saleId, customerId, line, onChange }: { lot: SlabLot; saleId: string; customerId: string; line: SaleLine; onChange: (ids: string[]) => void }) {
+/**
+ * How many slabs of the lot go on the invoice. Slabs are not labelled in the yard, so only the count is asked;
+ * the app takes this customer's reserved slabs first, then free ones in slab order.
+ */
+function SlabCount({ lot, saleId, customerId, line, onChange }: { lot: SlabLot; saleId: string; customerId: string; line: SaleLine; onChange: (ids: string[]) => void }) {
   const picked = new Set(line.slabIds ?? []);
   const res = reservedMap(lot);
   const mine = (id: string) => !!customerId && res.get(id)?.customerId === customerId;
-  const free = (lot.slabs ?? []).filter((x) => sellableTo(lot, x, customerId) || picked.has(x.id) || (saleId && x.saleId === saleId));
-  const others = (lot.slabs ?? []).filter((x) => x.status === "stock" && !free.includes(x)).length;
-  const flip = (id: string) => { const n = new Set(picked); if (n.has(id)) n.delete(id); else n.add(id); onChange([...n]); };
+  const ok = (lot.slabs ?? []).filter((x) => sellableTo(lot, x, customerId) || picked.has(x.id) || (saleId && x.saleId === saleId));
+  const rank = (id: string) => (picked.has(id) ? 0 : mine(id) ? 1 : 2);
+  const order = [...ok].sort((a, b) => rank(a.id) - rank(b.id) || a.no.localeCompare(b.no, "en", { numeric: true }));
+  const reserved = ok.filter((x) => mine(x.id)).length;
+  const others = (lot.slabs ?? []).filter((x) => x.status === "stock" && !ok.includes(x)).length;
+  const set = (v: number) => onChange(order.slice(0, Math.max(0, Math.min(order.length, Math.round(v)))).map((x) => x.id));
   return (
-    <div className="sm:col-span-4">
-      <div className="mb-1.5 flex items-center gap-3 text-[0.8rem] text-ink-3">
-        <span>{picked.size} of {free.length} slabs picked</span>
-        <button type="button" className="underline" onClick={() => onChange(free.map((x) => x.id))}>All</button>
-        {picked.size > 0 && <button type="button" className="underline" onClick={() => onChange([])}>None</button>}
+    <div className="flex flex-wrap items-end gap-3 sm:col-span-4">
+      <div className="w-40"><F label="No. of slabs"><NumIn value={picked.size} onChange={set} /></F></div>
+      <div className="pb-2.5 text-[0.82rem] text-ink-3">
+        {order.length} available{reserved ? ` · ${reserved} reserved for this customer, taken first` : ""}{others ? ` · ${others} reserved for others` : ""}
+        {picked.size < order.length && <button type="button" className="ml-2 underline" onClick={() => set(order.length)}>All</button>}
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        {free.map((x) => (
-          <button key={x.id} type="button" className={`chip num ${mine(x.id) && !picked.has(x.id) ? "ring-1 ring-accent" : ""}`} data-on={picked.has(x.id)} onClick={() => flip(x.id)} title={`${x.l && x.w ? `${x.l} × ${x.w} cm · grade ${x.grade}` : `Grade ${x.grade}`}${mine(x.id) ? " · reserved for this customer" : ""}`}>
-            {x.no.split("/").pop()} · {n2(x.sqft)}{mine(x.id) ? " · R" : ""}
-          </button>
-        ))}
-        {!free.length && <span className="text-[0.84rem] text-ink-3">No slabs left in this lot.</span>}
-      </div>
-      {others > 0 && <div className="mt-1.5 text-[0.8rem] text-ink-3">{others} slab{others > 1 ? "s" : ""} reserved for other customers not shown. R = reserved for this customer.</div>}
     </div>
   );
 }
@@ -284,7 +281,7 @@ function SaleForm({ ctx, initial, billFor = "", onClose, onSaved }: { ctx: Ctx; 
   const c = db.parties.find((p) => p.id === s.customerId);
   const t = saleTotals(s, db.settings.state, c?.state ?? db.settings.state);
   const cost = saleCost(s, db.lots, db.blocks, (l) => lotUnit(ctx.root, l));
-  const err = !s.customerId ? "Choose a customer" : !s.lines.length ? "Add at least one lot or block" : s.lines.some((l) => l.slabIds && !l.slabIds.length) ? "Pick the slabs for each lot" : clash ? `Slab ${clash.lot?.slabs?.find((y) => y.id === clash.id)?.no ?? ""} is reserved for ${db.parties.find((p) => p.id === clash.r!.customerId)?.company ?? "another customer"}` : s.lines.some((l) => !l.blockId && l.sqft > avail(l.lotId)) ? "More sq ft than in stock" : "";
+  const err = !s.customerId ? "Choose a customer" : !s.lines.length ? "Add at least one lot or block" : s.lines.some((l) => l.slabIds && !l.slabIds.length) ? "Enter the number of slabs for each lot" : clash ? `Slab ${clash.lot?.slabs?.find((y) => y.id === clash.id)?.no ?? ""} is reserved for ${db.parties.find((p) => p.id === clash.r!.customerId)?.company ?? "another customer"}` : s.lines.some((l) => !l.blockId && l.sqft > avail(l.lotId)) ? "More sq ft than in stock" : "";
   const isBlockSale = s.lines.some((l) => l.blockId);
 
   const save = () => {
@@ -316,7 +313,7 @@ function SaleForm({ ctx, initial, billFor = "", onClose, onSaved }: { ctx: Ctx; 
       footer={<><button className="btn btn-primary" disabled={Boolean(err)} onClick={save}>{initial ? "Save" : "Save and view invoice"}</button><button className="btn btn-quiet" onClick={onClose}>Cancel</button>{err && <span className="text-sm text-ink-3">{err}</span>}{initial && <button className="btn btn-quiet btn-sm ml-auto !text-neg" onClick={del}>Cancel invoice</button>}</>}>
       <Section title="Bill to">
         <Grid cols={3}>
-          <F label="Customer" span={2} hint={c ? (c.intl ? `Export · ${c.country} · ${c.creditDays} days credit` : `${c.gstin || "No GSTIN"} · ${STATES[c.state] ?? ""} · ${c.creditDays} days credit`) : undefined}><Sel value={s.customerId} onChange={(v) => { const n = db.parties.find((p) => p.id === v); const was = isExport(c); setS({ ...s, customerId: v, ...(n?.intl && !was ? { lut: true, gstRate: 0 } : !n?.intl && was ? { lut: false, gstRate: s.hsn === "6802" ? 18 : 5 } : {}) }); }} placeholder="Choose customer" options={[...customers.filter((p) => !p.intl).map((p) => ({ v: p.id, l: `${p.company} · ${p.city}` })), ...customers.filter((p) => p.intl).map((p) => ({ v: p.id, l: `${p.company} · ${p.country} (export)` }))]} /></F>
+          <F label="Customer" span={2} hint={c ? (c.intl ? `Export · ${c.country} · ${c.creditDays} days credit` : `${c.gstin || "No GSTIN"} · ${STATES[c.state] ?? ""} · ${c.creditDays} days credit`) : undefined}><Sel value={s.customerId} onChange={(v) => { const n = db.parties.find((p) => p.id === v); const was = isExport(c); setS({ ...s, customerId: v, ...(n?.intl && !was ? { lut: true, gstRate: 0 } : !n?.intl && was ? { lut: false, gstRate: s.hsn === "6802" ? 18 : 5 } : {}) }); }} placeholder="Choose customer" options={[...customers.filter((p) => !p.intl).map((p) => ({ v: p.id, l: `${p.company}${p.city ? ` · ${p.city}` : ""}` })), ...customers.filter((p) => p.intl).map((p) => ({ v: p.id, l: `${p.company} · ${p.country} (export)` }))]} /></F>
           <F label="Invoice date"><TextIn type="date" value={s.date} onChange={(v) => setS({ ...s, date: v })} /></F>
           <F label="Invoice no."><TextIn value={s.invoiceNo} onChange={(v) => setS({ ...s, invoiceNo: v })} /></F>
           <F label="HSN"><Sel value={s.hsn} onChange={(v) => setS({ ...s, hsn: v, gstRate: v === "6802" ? 18 : s.gstRate })} options={[{ v: "6802", l: "6802 · worked slabs & tiles" }, { v: "2515", l: "2515 · marble blocks / rough" }, { v: "2516", l: "2516 · granite blocks / rough" }]} /></F>
@@ -357,7 +354,7 @@ function SaleForm({ ctx, initial, billFor = "", onClose, onSaved }: { ctx: Ctx; 
                 {lot?.slabs?.length ? <F label="Sq ft"><div className="field num">{n2(ln.sqft)}</div></F> : <F label={b ? "Tonnes" : "Sq ft"} err={!b && ln.sqft > avail(ln.lotId) ? "Exceeds stock" : undefined}><NumIn value={ln.sqft} onChange={(v) => setS({ ...s, lines: s.lines.map((x, j) => j === i ? { ...x, sqft: v } : x) })} /></F>}
                 <F label="Rate" err={below ? "Below cost" : undefined}><NumIn value={ln.rate} onChange={(v) => setS({ ...s, lines: s.lines.map((x, j) => j === i ? { ...x, rate: v } : x) })} suffix={b ? "₹/t" : "₹/sq ft"} /></F>
                 <button className="btn btn-quiet btn-sm !px-2" aria-label="Remove line" onClick={() => setS({ ...s, lines: s.lines.filter((_, j) => j !== i) })}><Trash2 size={14} /></button>
-                {lot?.slabs?.length ? <SlabPick lot={lot} saleId={s.id} customerId={s.customerId} line={ln} onChange={(slabIds) => setS({ ...s, lines: s.lines.map((x, j) => j === i ? { ...x, slabIds, sqft: Math.round(lot.slabs!.filter((y) => slabIds.includes(y.id)).reduce((a, y) => a + y.sqft, 0) * 100) / 100 } : x) })} /> : null}
+                {lot?.slabs?.length ? <SlabCount lot={lot} saleId={s.id} customerId={s.customerId} line={ln} onChange={(slabIds) => setS({ ...s, lines: s.lines.map((x, j) => j === i ? { ...x, slabIds, sqft: Math.round(lot.slabs!.filter((y) => slabIds.includes(y.id)).reduce((a, y) => a + y.sqft, 0) * 100) / 100 } : x) })} /> : null}
               </div>
             );
           })}
@@ -486,7 +483,7 @@ function Invoice({ ctx, sale, onClose }: { ctx: Ctx; sale: Sale; onClose: () => 
             {sale.lines.map((l, i) => {
               const lot = db.lots.find((x) => x.id === l.lotId);
               const b = db.blocks.find((x) => x.id === l.blockId);
-              const desc = b ? `${b.variety} ${b.stoneType} rough block no. ${b.no}, ${b.l}×${b.w}×${b.h} cm` : `${lot?.variety} ${lot?.stoneType} slabs, ${lot?.thicknessMm} mm ${lot?.finish?.toLowerCase()} (lot ${lot?.lotNo}${l.slabIds?.length ? `; ${l.slabIds.length} slab${l.slabIds.length > 1 ? "s" : ""}: ${slabRange(lot?.slabs?.filter((x) => l.slabIds!.includes(x.id)).map((x) => x.no) ?? [])}` : ""})`;
+              const desc = b ? `${b.variety} ${b.stoneType} rough block no. ${b.no}, ${b.l}×${b.w}×${b.h} cm` : `${lot?.variety} ${lot?.stoneType} slabs, ${lot?.thicknessMm} mm ${lot?.finish?.toLowerCase()} (lot ${lot?.lotNo}${l.slabIds?.length ? `; ${l.slabIds.length} slab${l.slabIds.length > 1 ? "s" : ""}` : ""})`;
               return <tr key={l.lotId || l.blockId} className="border-b border-black/10"><td className="py-1.5">{i + 1}</td><td>{desc}</td><td>{sale.hsn}</td><td className="whitespace-nowrap pl-2 text-right">{b ? n2(l.sqft) : n0(l.sqft)} {qtyUnit(l)}</td><td className="whitespace-nowrap pl-2 text-right">{rs2(l.rate)}</td><td className="whitespace-nowrap pl-2 text-right">{rs2(l.sqft * l.rate)}</td></tr>;
             })}
             {sale.freight > 0 && <tr className="border-b border-black/10"><td className="py-1.5" /><td>Freight</td><td>9965</td><td /><td /><td className="text-right">{rs2(sale.freight)}</td></tr>}
