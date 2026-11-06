@@ -3,7 +3,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --ground: #eef0ec;
+  --ground: #d3d8d0;
   --surface: #ffffff;
   --surface-2: #e4e7e1;
   --surface-3: #d5d9d2;
@@ -135,16 +135,25 @@ body {
   cursor: not-allowed;
 }
 
+/* Entry boxes are white with a thin edge, so they read on the grey screen and inside white cards */
 .field {
   width: 100%;
-  background: var(--surface-2);
+  background: var(--surface);
+  border: 1px solid var(--surface-3);
   border-radius: 12px;
-  padding: 0.7rem 0.9rem;
+  padding: calc(0.7rem - 1px) calc(0.9rem - 1px);
   font-size: 0.95rem;
   color: var(--ink);
-  transition: background-color 160ms ease;
+  transition: background-color 160ms ease, border-color 160ms ease;
 }
 .field:hover {
+  border-color: var(--data-2);
+}
+.dark .field {
+  background: var(--surface-2);
+  border-color: transparent;
+}
+.dark .field:hover {
   background: var(--surface-3);
 }
 .field:focus {
