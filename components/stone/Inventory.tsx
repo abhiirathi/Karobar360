@@ -1,12 +1,14 @@
 "use client";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowRight, ArrowRightLeft, Factory, Images, Layers, Pencil, Plus, QrCode, Undo2 } from "lucide-react";
+import { ArrowRight, ArrowRightLeft, Bookmark, Factory, Images, Layers, Pencil, Plus, QrCode, Undo2 } from "lucide-react";
 import { baseCost, blockCost, cbm, daysSince, dmy, lakh, n0, n2, perTonne, purchaseValue, rs, rs2, today } from "@/lib/stone/calc";
 import { IN_STOCK, godowns, whereIs } from "@/lib/stone/godowns";
 import { lotCost, lotUnit, storesPerSqft, storesShare } from "@/lib/stone/costing";
 import { firmName, firmOf, journey } from "@/lib/stone/firms";
 import { slabCount } from "@/lib/stone/slabs";
-import type { Block, BlockStatus, MineCost, SlabLot } from "@/lib/stone/types";
+import { freeCount, freeSqft, reservations, reservedCount, reservedSqft } from "@/lib/stone/reserve";
+import type { Block, BlockStatus, MineCost, Reservation, SlabLot } from "@/lib/stone/types";
+import { ReserveForm, ReservedList } from "./Reserved";
 import type { Ctx } from "./StoneApp";
 import BlockForm, { STATUS_LABEL, type BlockMode } from "./BlockForm";
 import QrLabels from "./QrLabels";
@@ -227,7 +229,10 @@ function SlabInventory({ ctx }: { ctx: Ctx }) {
   const { db, update } = ctx;
   const C = ctx.costs;
   const R = ctx.root;
-  const [view, setView] = useState<"lots" | "slabs">("lots");
+  const [view, setView] = useState<"lots" | "slabs" | "reserved">(ctx.sub === "slabs:reserved" ? "reserved" : "lots");
+  useEffect(() => { if (ctx.sub === "slabs:reserved") setUrlTab("slabs"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [reserve, setReserve] = useState<{ lot: SlabLot; r?: Reservation } | null>(null);
+  const canReserve = ctx.edit("sales") || ctx.edit("stock");
   const [site, setSite] = useState<"all" | "depot" | "unit">("all");
   const [open, setOpen] = useState<SlabLot | null>(null);
   const [edit, setEdit] = useState<SlabLot | null>(null);
@@ -237,7 +242,9 @@ function SlabInventory({ ctx }: { ctx: Ctx }) {
   const unit = (l: SlabLot) => lotUnit(R, l);
 
   const all = db.lots.filter((l) => l.available > 0);
-  const lots = all.filter((l) => site === "all" || l.site === site);
+  const lots = all.filter((l) => (site === "all" || l.site === site) && freeSqft(l) > 0);
+  const resRows = reservations(db);
+  const resSqft = all.reduce((a, l) => a + reservedSqft(l), 0);
   const stockSqft = all.reduce((a, l) => a + l.available, 0);
   const stockVal = all.reduce((a, l) => a + l.available * unit(l), 0);
   const listVal = all.reduce((a, l) => a + l.available * (l.listRate || 0), 0);
@@ -251,33 +258,34 @@ function SlabInventory({ ctx }: { ctx: Ctx }) {
     { key: "blk", label: "Block no.", render: (l) => <span className={blockNo(l) ? "font-medium" : "text-ink-3"}>{src(l)}</span>, sort: (l) => src(l) },
     { key: "cd", label: "Date", render: (l) => <div><div className="num whitespace-nowrap">{dmy(l.createdAt)}</div><div className="text-[0.8rem] text-ink-3">{l.blockId ? "cut" : "bought"}</div></div>, sort: (l) => l.createdAt },
     { key: "q", label: "Quality", render: (l) => <div><div>{l.variety}</div><div className="text-[0.8rem] text-ink-3">{l.thicknessMm} mm · {l.finish} · grade {l.grade}{l.catalogue ? " · in catalogue" : ""}</div></div>, sort: (l) => l.variety },
-    { key: "n", label: "Slabs", align: "right", render: (l) => <span className="font-medium">{slabCount(l)}</span>, sort: (l) => slabCount(l) },
-    { key: "s", label: "In stock", align: "right", render: (l) => <div><div>{n0(l.available)} sq ft</div><div className="text-[0.8rem] text-ink-3">of {n0(l.sqft)}</div></div>, sort: (l) => l.available },
+    { key: "n", label: "Slabs", align: "right", render: (l) => <div><div className="font-medium">{freeCount(l)}</div>{reservedCount(l) > 0 && <div className="text-[0.8rem] text-warn">+{reservedCount(l)} reserved</div>}</div>, sort: (l) => freeCount(l) },
+    { key: "s", label: "In stock", align: "right", render: (l) => { const rv = reservedSqft(l); return <div><div>{n0(freeSqft(l))} sq ft</div><div className={`text-[0.8rem] ${rv ? "text-warn" : "text-ink-3"}`}>{rv ? `${n0(rv)} reserved` : `of ${n0(l.sqft)}`}</div></div>; }, sort: (l) => freeSqft(l) },
     ...(C ? [{ key: "c", label: "Cost ₹/sq ft", align: "right" as const, render: (l: SlabLot) => { const st = storesPerSqft(R, l); return <div><div className="font-medium">{rs2(unit(l))}</div>{st > 0 && <div className="text-[0.78rem] text-ink-3">incl. {rs2(st)} stores</div>}</div>; }, sort: (l: SlabLot) => unit(l) }] : []),
     { key: "p", label: "List", align: "right", render: (l) => l.listRate ? <div><div>{rs(l.listRate)}</div>{C && <div className={`text-[0.8rem] ${l.listRate < unit(l) ? "text-neg" : "text-ink-3"}`}>{l.listRate < unit(l) ? "below cost" : `${Math.round(((l.listRate - unit(l)) / l.listRate) * 100)}% margin`}</div>}</div> : <span className="text-ink-3">Set</span> },
     { key: "w", label: "Where", render: (l) => <div><Badge tone={l.site === "depot" ? "good" : "plain"}>{l.site === "depot" ? "Depot" : "Unit"}</Badge><div className="mt-0.5 text-[0.8rem] text-ink-3">{l.location}</div></div> },
     { key: "age", label: "Age", align: "right", render: (l) => { const a = daysSince(l.createdAt); return <span className={a > 90 ? "text-warn" : ""}>{a} d</span>; }, sort: (l) => daysSince(l.createdAt) },
+    ...(canReserve ? [{ key: "rv", label: "", render: (l: SlabLot) => <div className="flex justify-end" onClick={(e) => e.stopPropagation()}><button className="btn btn-quiet btn-sm" onClick={() => setReserve({ lot: l })}><Bookmark size={13} />Reserve</button></div> }] : []),
   ];
 
   return (
     <div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Slab stock" value={`${n0(stockSqft)} sq ft`} sub={`${all.length} lots · ${n0(all.reduce((a, l) => a + slabCount(l), 0))} slabs`} />
+        <Stat label="Slab stock" value={`${n0(stockSqft)} sq ft`} sub={`${all.length} lots · ${n0(all.reduce((a, l) => a + slabCount(l), 0))} slabs${resSqft ? ` · ${n0(resSqft)} sq ft reserved` : ""}`} />
         {C ? <Stat label="Stock at cost" value={lakh(stockVal)} sub={listVal ? `${lakh(listVal)} at list price` : "Includes stores cost per sq ft"} /> : <Stat label="Stock at list price" value={lakh(listVal)} sub={`${inCat} lots in the dealer catalogue`} />}
         <Stat label="Older than 90 days" value={`${n0(slow.reduce((a, l) => a + l.available, 0))} sq ft`} sub={slow.length ? `${slow.length} lots` : "None"} tone={slow.length ? "warn" : undefined} />
         <Stat label="In dealer catalogue" value={`${inCat} lots`} sub={`${n0(all.filter((l) => l.site === "depot").reduce((a, l) => a + l.available, 0))} sq ft at depot`} />
       </div>
 
       <div className="mt-8 flex flex-wrap items-center gap-3">
-        <Seg value={view} onChange={setView} tabs={[{ key: "lots", label: "By lot" }, { key: "slabs", label: "By slab" }]} />
+        <Seg value={view} onChange={setView} tabs={[{ key: "lots", label: "By lot" }, { key: "slabs", label: "By slab" }, { key: "reserved", label: "Reserved", count: resRows.length }]} />
         {view === "lots" && ctx.mods.processing && <Seg value={site} onChange={setSite} tabs={[{ key: "all", label: "All" }, { key: "depot", label: "Depot" }, { key: "unit", label: "Unit" }]} />}
         <div className="ml-auto flex flex-wrap gap-2"><button className="btn btn-quiet btn-sm" onClick={() => setShare(true)}><Images size={15} />Dealer catalogue</button></div>
       </div>
       <div className="mt-4">
-        {view === "slabs" ? <SlabsView ctx={ctx} /> : (
+        {view === "reserved" ? <ReservedList ctx={ctx} onEdit={(lot, r) => setReserve({ lot, r })} /> : view === "slabs" ? <SlabsView ctx={ctx} /> : (
           <>
             <Table rows={lots} cols={cols} onRow={setOpen} search={(l) => `${l.lotNo} ${src(l)} ${l.variety} ${l.location} ${l.finish}`} empty="No slabs in stock." initialSort={{ key: "age", dir: -1 }} />
-            <p className="mt-2 text-[0.8rem] text-ink-3">Click a lot to see its history: opening, every sale, its cost so far and the margin on what is sold.{C ? " Stores issued each month are spread over the sq ft cut that month." : ""}</p>
+            <p className="mt-2 text-[0.8rem] text-ink-3">Click a lot to see its history: opening, every sale, its cost so far and the margin on what is sold. Slabs and sq ft show what is free to sell; reserved slabs are under Reserved.{C ? " Stores issued each month are spread over the sq ft cut that month." : ""}</p>
           </>
         )}
       </div>
@@ -290,6 +298,7 @@ function SlabInventory({ ctx }: { ctx: Ctx }) {
       {send && <TransferForm ctx={ctx} item={send} kind="lot" onClose={() => setSend(null)} />}
       {move && <MoveForm lot={move} onClose={() => setMove(null)} onSave={(freight, loc) => { update((d) => { const l = d.lots.find((x) => x.id === move.id)!; l.site = "depot"; l.location = loc; l.cost += freight; }); setMove(null); }} />}
       {share && <Catalogue ctx={ctx} onClose={() => setShare(false)} />}
+      {reserve && <ReserveForm ctx={ctx} lot={db.lots.find((x) => x.id === reserve.lot.id) ?? reserve.lot} initial={reserve.r} onClose={() => setReserve(null)} />}
     </div>
   );
 }
@@ -356,7 +365,7 @@ function LotHistory({ ctx, lot: l, onClose, onEdit, onSend, onMove }: { ctx: Ctx
         ))}
         <div className={`${row} border-t border-surface-2 bg-surface-2/50 font-semibold`}>
           <span />
-          <span>In stock now<span className="block text-[0.8rem] font-normal text-ink-3">{slabCount(l)} slabs{C ? ` · ${rs(l.available * unit)} at cost` : ""}</span></span>
+          <span>In stock now<span className="block text-[0.8rem] font-normal text-ink-3">{slabCount(l)} slabs{reservedCount(l) ? ` · ${reservedCount(l)} reserved` : ""}{C ? ` · ${rs(l.available * unit)} at cost` : ""}</span></span>
           <span className="num text-right">{n0(l.available)}</span>
         </div>
       </div>

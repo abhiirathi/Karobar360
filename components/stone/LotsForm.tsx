@@ -30,6 +30,7 @@ type Draft = {
 /** A lot already sold from, moved on or in another firm keeps its slabs as they are. */
 function lockOf(l: SlabLot, block: Block, s: Ctx["root"]["settings"]) {
   if (l.slabs?.some((x) => x.status === "sold") || l.available < l.sqft - 0.01) return "Has sales";
+  if (l.reserves?.some((r) => r.slabIds.length)) return "Has reservations";
   if (l.site !== "unit") return "Moved to depot";
   if (firmOf(l, s) !== firmOf(block, s)) return "With another firm";
   return "";

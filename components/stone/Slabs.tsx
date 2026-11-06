@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Layers, Search } from "lucide-react";
 import { n0, n2, rs2 } from "@/lib/stone/calc";
 import { SLAB_STATUS, allSlabs, moveSlabs, nextLotNo, slabArea, splitLot, syncLot, type SlabRow } from "@/lib/stone/slabs";
+import { reservedMap } from "@/lib/stone/reserve";
 import type { Grade, Slab, SlabStatus } from "@/lib/stone/types";
 import type { Ctx } from "./StoneApp";
 import { Badge, Drawer, F, Grid, Note, NumIn, Sel, Stat, TextIn } from "./ui";
@@ -15,6 +16,8 @@ export default function SlabsView({ ctx }: { ctx: Ctx }) {
   const { db, update } = ctx;
   const can = ctx.edit("processing") || ctx.edit("stock");
   const rows = useMemo(() => allSlabs(db), [db]);
+  const held = useMemo(() => { const m = new Map<string, string>(); for (const l of db.lots) for (const [id, r] of reservedMap(l)) m.set(id, r.customerId); return m; }, [db]);
+  const who = (id: string) => db.parties.find((p) => p.id === held.get(id))?.company ?? "a customer";
   const [where, setWhere] = useState<Where>("all");
   const [status, setStatus] = useState<St>("stock");
   const [block, setBlock] = useState("");
@@ -123,7 +126,7 @@ export default function SlabsView({ ctx }: { ctx: Ctx }) {
                 <td className="num px-3 py-2">{r.l && r.w ? `${n0(r.l)} × ${n0(r.w)}` : <span className="text-ink-3">Not measured</span>}</td>
                 <td className="num px-3 py-2 text-right">{n2(r.sqft)}</td>
                 <td className="px-3 py-2">{r.grade}</td>
-                <td className="px-3 py-2"><Badge tone={r.status === "stock" ? "good" : r.status === "broken" ? "neg" : "plain"}>{SLAB_STATUS[r.status]}</Badge></td>
+                <td className="px-3 py-2">{held.has(r.id) ? <Badge tone="warn">Reserved · {who(r.id)}</Badge> : <Badge tone={r.status === "stock" ? "good" : r.status === "broken" ? "neg" : "plain"}>{SLAB_STATUS[r.status]}</Badge>}</td>
                 <td className="px-3 py-2 pr-4"><span>{r.lot.site === "depot" ? "Depot" : "Unit"}</span><span className="block text-[0.78rem] text-ink-3">{r.lot.location}</span></td>
               </tr>
             ))}
