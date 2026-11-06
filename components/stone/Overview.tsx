@@ -7,6 +7,7 @@ import { billTotals, jobsOf, leftOf, rentDays, unbilled } from "@/lib/stone/jobw
 import { lotCost, lotUnit, storesAlloc } from "@/lib/stone/costing";
 import { onHand, storesOf } from "@/lib/stone/stores";
 import { slabCount } from "@/lib/stone/slabs";
+import { expired, reservations } from "@/lib/stone/reserve";
 import { firmOf, kindLabel } from "@/lib/stone/firms";
 import type { AreaKey } from "@/lib/stone/perm";
 import { TallyPanel } from "./TallyView";
@@ -90,6 +91,11 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
         const p = party(o.customerId);
         if (!bl.paid && p && daysSince(bl.date) > p.creditDays) out.push({ tone: "warn", text: <>{p.company}: job work bill {bl.invoiceNo} is {daysSince(bl.date) - p.creditDays} days past its {p.creditDays}-day credit. {rs(billTotals(bl, S.state, p.state || S.state).total)} due.</>, go: ["unit", "jobwork:bills"] });
       }
+    }
+    const late = reservations(db).filter((x) => expired(x.r));
+    if (late.length) {
+      const who = [...new Set(late.map((x) => party(x.r.customerId)?.company ?? "a customer"))];
+      out.push({ tone: "warn", text: <>{late.reduce((a, x) => a + x.slabs.length, 0)} reserved slabs are past their date ({who.slice(0, 3).join(", ")}{who.length > 3 ? ` and ${who.length - 3} more` : ""}). Bill, extend or release them so other customers can buy.</>, go: ["inventory", "slabs:reserved"] });
     }
     for (const p of db.parties) if (p.gstin && !checkGstin(p.gstin).ok) out.push({ tone: "warn", text: <>{p.company}’s GSTIN fails the check digit. Correct it before filing GSTR-1.</>, go: ["parties", p.kind] });
     return out.sort((a, c) => (a.tone === c.tone ? 0 : a.tone === "neg" ? -1 : 1));

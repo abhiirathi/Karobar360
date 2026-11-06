@@ -56,7 +56,7 @@ export function moveSlabs(db: StoneDB, ids: string[], toLotNo: string) {
   let to = db.lots.find((l) => l.lotNo === no && firmOf(l, db.settings) === firm);
   if (!to) {
     const f = moving[0].from;
-    to = { ...f, id: uid(), lotNo: no, slabs: [], cost: 0, sqft: 0, available: 0, pieces: 0, photos: [], catalogue: false, createdAt: f.createdAt };
+    to = { ...f, id: uid(), lotNo: no, slabs: [], reserves: [], cost: 0, sqft: 0, available: 0, pieces: 0, photos: [], catalogue: false, createdAt: f.createdAt };
     db.lots.push(to);
   }
   for (const { s, from } of moving) {
@@ -66,6 +66,15 @@ export function moveSlabs(db: StoneDB, ids: string[], toLotNo: string) {
     from.cost = Math.max(0, from.cost - share);
     to.slabs = [...(to.slabs ?? []), s];
     to.cost += share;
+    // A reserved slab stays reserved for the same customer in its new lot.
+    const res = from.reserves?.find((r) => r.slabIds.includes(s.id));
+    if (res) {
+      res.slabIds = res.slabIds.filter((id) => id !== s.id);
+      from.reserves = from.reserves!.filter((r) => r.slabIds.length);
+      const there = (to.reserves ?? []).find((r) => r.customerId === res.customerId);
+      if (there) there.slabIds.push(s.id);
+      else to.reserves = [...(to.reserves ?? []), { ...res, id: uid(), slabIds: [s.id] }];
+    }
   }
   const touched = new Set([to, ...moving.map((m) => m.from)]);
   for (const l of touched) syncLot(l);

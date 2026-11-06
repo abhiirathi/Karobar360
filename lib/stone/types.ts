@@ -207,6 +207,20 @@ export interface SlabLot {
   slabs?: Slab[]; // every slab in the lot, when tracked one by one
   firmId?: string;
   trail?: Transfer[];
+  reserves?: Reservation[]; // slabs kept aside for customers, one entry per customer
+}
+
+/** Slabs of a lot a customer has picked and will lift later. Kept for them until billed or released, even after the till date. */
+export interface Reservation {
+  id: string;
+  customerId: string;
+  slabIds: string[];
+  on: string; // date reserved
+  till: string; // reserved till; after it the reservation shows as expired but still holds the slabs
+  rate: number; // agreed ₹ per sq ft, filled into the invoice
+  advance?: number; // advance taken, ₹ (a note, not a payment entry)
+  note?: string;
+  by?: string; // who reserved
 }
 
 export type SlabStatus = "stock" | "sold" | "broken";

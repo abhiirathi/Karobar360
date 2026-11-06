@@ -10,6 +10,7 @@ const JOURNEY = [
   { icon: Truck, title: "Into the godown", where: "Purchases → Godown, then Received qty", text: "Saving the purchase puts its blocks in the godown you pick. Enter the weight received when it is weighed; costing follows it." },
   { icon: Factory, title: "Processing, then lots", where: "Inventory → Blocks → Processing → Create lots", text: "Click Processing when a block goes to the saw. When it is done, Create lots: pick the block and enter each lot with its size and slabs." },
   { icon: Warehouse, title: "Slabs in stock", where: "Inventory → Slabs, by lot or by slab", text: "Each lot shows its block no. and its cost per sq ft, stores included." },
+  { icon: Warehouse, title: "Reserve slabs for a customer", where: "Inventory → Slabs → Reserve on a lot", text: "Pick the customer, number of slabs and rate; it stays reserved till the date you set (10 days unless changed), and only that customer can be billed those slabs. Under Reserved, each customer has Bill for a filled-in invoice, and PDF or WhatsApp for the reservation slip. Past their date, reservations show under Expired until you release or extend them." },
   { icon: ReceiptText, title: "Sold on an invoice", where: "Sales → New sale", text: "Pick the lot and the exact slabs. GST, e-way bill and export papers are made for you." },
   { icon: Wallet, title: "Payment received", where: "Sales → Payment column", text: "Switch Due to Received. Overdue invoices show on the dashboard." },
 ];
