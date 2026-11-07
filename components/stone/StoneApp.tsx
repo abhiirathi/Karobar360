@@ -25,6 +25,7 @@ import Scan from "./Scan";
 import Auth from "./Auth";
 import Help from "./Help";
 import Services from "./Services";
+import GlobalSearch from "./Search";
 import Pricing from "@/components/Pricing";
 
 export type View = "overview" | "inventory" | "unit" | "stores" | "purchases" | "sales" | "parties" | "tally" | "team" | "settings" | "services" | "pricing" | "help" | "scan" | "labour";
@@ -143,6 +144,11 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
   const can = (a: AreaKey) => level(perms, a);
   const nav = navFor(mods, can, perms).filter((n) => n.show);
   const canFirms = (mode === "demo" || !!me?.isOwner) && can("settings") === "edit";
+  // What the search box may open: only sections this person can see.
+  const searchScope = {
+    views: new Set<string>(nav.filter((n) => n.key !== "unit" || (n.children ?? []).some((c) => c.sub === "jobwork" && c.show)).map((n) => n.key)),
+    parties: new Set<string>((nav.find((n) => n.key === "parties")?.children ?? []).filter((c) => c.show).map((c) => c.sub)),
+  };
 
   if (status === "signedout") return <Auth onDone={reload} />;
   if (status === "error") {
@@ -192,6 +198,9 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
             {canFirms && <button onClick={() => go("settings", "firms")} className="mt-2 inline-flex items-center gap-1.5 text-[0.82rem] font-medium text-accent hover:underline"><Building2 size={14} />Add another firm</button>}
           </div>
         )}
+        <div className="px-3 pb-2 pt-1 lg:pt-2">
+          <GlobalSearch db={db} scope={searchScope} firms={firms} onOpen={(v, t, f) => { if (firm && f && f !== firm.id) setFirm(f); go(v as View, t); }} />
+        </div>
         <nav className="scroll-thin flex gap-1 overflow-x-auto px-3 pb-3 lg:mt-2 lg:flex-col lg:overflow-visible lg:px-3" aria-label="Sections">
           {nav.map((n) => {
             const on = n.key === shown;

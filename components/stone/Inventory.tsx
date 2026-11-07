@@ -44,7 +44,8 @@ function BlockInventory({ ctx }: { ctx: Ctx }) {
   // A scanned label can open the lots form for its block ("lots:<block id>")
   const [lotsFor, setLotsFor] = useState<string | null>(ctx.sub.startsWith("lots:") ? ctx.sub.slice(5) : null);
   useEffect(() => { if (ctx.sub.startsWith("lots:")) setUrlTab("blocks"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [open, setOpen] = useState<Block | null>(null);
+  const [open, setOpen] = useState<Block | null>(() => (ctx.sub.startsWith("blocks:open:") ? db.blocks.find((b) => b.id === ctx.sub.slice(12)) ?? null : null));
+  useEffect(() => { if (ctx.sub.startsWith("blocks:open:")) setUrlTab("blocks"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [form, setForm] = useState<{ b: Block | null; mode: BlockMode } | null>(null);
   const [labels, setLabels] = useState(false);
   const [send, setSend] = useState<Block | null>(null);
@@ -234,7 +235,8 @@ function SlabInventory({ ctx }: { ctx: Ctx }) {
   const [reserve, setReserve] = useState<{ lot: SlabLot; r?: Reservation } | null>(null);
   const canReserve = ctx.edit("sales") || ctx.edit("stock");
   const [site, setSite] = useState<"all" | "depot" | "unit">("all");
-  const [open, setOpen] = useState<SlabLot | null>(null);
+  const [open, setOpen] = useState<SlabLot | null>(() => (ctx.sub.startsWith("slabs:open:") ? db.lots.find((l) => l.id === ctx.sub.slice(11)) ?? null : null));
+  useEffect(() => { if (ctx.sub.startsWith("slabs:open:")) setUrlTab("slabs"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [edit, setEdit] = useState<SlabLot | null>(null);
   const [send, setSend] = useState<SlabLot | null>(null);
   const [move, setMove] = useState<SlabLot | null>(null);
