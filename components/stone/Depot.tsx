@@ -27,7 +27,8 @@ export default function Depot({ ctx }: { ctx: Ctx }) {
   const billFor = ctx.sub.startsWith("bill:") ? ctx.sub.slice(5) : "";
   const [sale, setSale] = useState<Sale | null | "new">((ctx.sub === "new" || billFor) && ctx.edit("sales") ? "new" : null);
   useEffect(() => { if (ctx.sub === "new" || billFor) setUrlTab(""); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [inv, setInv] = useState<Sale | null>(null);
+  const [inv, setInv] = useState<Sale | null>(() => (ctx.sub.startsWith("inv:") ? db.sales.find((x) => x.id === ctx.sub.slice(4)) ?? null : null));
+  useEffect(() => { if (ctx.sub.startsWith("inv:")) setUrlTab(""); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [confirmPay, setConfirmPay] = useState<Sale | null>(null);
   const clearsNow = !!db.settings.purge?.enabled && db.settings.purge.after === "paid";
   const unitCost = (l: SlabLot) => lotUnit(ctx.root, l);

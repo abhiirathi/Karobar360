@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Phone, Plus, Trash2 } from "lucide-react";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { STATES, checkGstin, daysSince, lakh, n0, saleTotals } from "@/lib/stone/calc";
@@ -7,7 +7,7 @@ import { storesOf } from "@/lib/stone/stores";
 import { emptyParty } from "@/lib/stone/seed";
 import type { Party, PartyKind, StoneDB } from "@/lib/stone/types";
 import type { Ctx } from "./StoneApp";
-import { Area, Badge, Drawer, F, Grid, NumIn, Section, Sel, Seg, Table, TextIn, type Col } from "./ui";
+import { Area, Badge, Drawer, F, Grid, NumIn, Section, Sel, Seg, Table, TextIn, setUrlTab, type Col } from "./ui";
 
 const COUNTRIES = ["United Arab Emirates", "Saudi Arabia", "Qatar", "Oman", "Kuwait", "Bahrain", "Nepal", "Bangladesh", "Sri Lanka", "Maldives", "Mauritius", "United States", "United Kingdom", "Australia", "Canada", "Singapore", "Malaysia", "Vietnam", "Italy", "Turkey", "Greece", "Spain", "Egypt", "Kenya", "South Africa", "Brazil", "Portugal", "Iran", "China"];
 const LABEL: Record<PartyKind, string> = { customer: "Customers", supplier: "Suppliers", vendor: "Vendors", transporter: "Transporters", quality: "Quality", mine: "Mines", godown: "Godowns" };
@@ -37,7 +37,8 @@ function usedBy(db: StoneDB, p: Party) {
 
 export default function Parties({ ctx, kind }: { ctx: Ctx; kind: PartyKind }) {
   const { db, update } = ctx;
-  const [form, setForm] = useState<Party | null>(null);
+  const [form, setForm] = useState<Party | null>(() => { const [, act, id] = ctx.sub.split(":"); return act === "open" ? db.parties.find((p) => p.id === id && p.kind === kind) ?? null : null; });
+  useEffect(() => { if (ctx.sub.includes(":open:")) setUrlTab(kind); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [where, setWhere] = useState<"all" | "india" | "intl">("all");
   const can = ctx.edit("parties");
   const ofKind = db.parties.filter((p) => p.kind === kind);

@@ -35,10 +35,10 @@ export default function Purchases({ ctx }: { ctx: Ctx }) {
   const slabsOk = ctx.can("stock") !== "none" && (ctx.mods.trading || ctx.mods.depot);
   const allowed: Tab[] = [...(blocksOk ? (["domestic", "import"] as Tab[]) : []), ...(slabsOk ? (["slabs"] as Tab[]) : [])];
   // A dashboard shortcut sends "domestic:new" etc. to open the form straight away
-  const [sub0, act] = ctx.sub.split(":");
+  const [sub0, act, arg] = ctx.sub.split(":");
   const [tabRaw, setTab] = useState<Tab>((sub0 as Tab) || allowed[0] || "domestic");
   const tab: Tab = allowed.includes(tabRaw) ? tabRaw : allowed[0] ?? "domestic";
-  const [open, setOpen] = useState<Bill | "new" | null>(act === "new" && tab !== "slabs" && ctx.edit("blocks") ? "new" : null);
+  const [open, setOpen] = useState<Bill | "new" | null>(() => act === "new" && tab !== "slabs" && ctx.edit("blocks") ? "new" : act === "bill" ? bills(db.blocks).find((x) => x.id === arg) ?? null : null);
   const [buy, setBuy] = useState(act === "new" && tab === "slabs" && ctx.edit("stock"));
   useEffect(() => { if (act) setUrlTab(sub0); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const sup = (id: string) => ctx.root.parties.find((p) => p.id === id);
