@@ -15,7 +15,7 @@ export default function Home() {
   return (
     <>
       <Reveal />
-      <header className="mx-auto flex max-w-7xl items-center gap-8 px-5 py-5 sm:px-8">
+      <header className="mx-auto flex max-w-7xl items-center gap-2 px-5 py-5 sm:gap-8 sm:px-8">
         <Logo />
         <nav className="hidden items-center gap-7 text-[0.95rem] text-ink-2 md:flex">
           <a href="#industries" className="hover:text-ink">Industries</a>
@@ -26,10 +26,10 @@ export default function Home() {
           <a href="#privacy" className="inline-flex items-center gap-1.5 hover:text-ink"><Lock size={14} /> Privacy</a>
           <Link href="/contact" className="hover:text-ink">Contact</Link>
         </nav>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1 sm:gap-2">
           <ThemeToggle />
-          <Link href="/stone" className="btn btn-quiet btn-sm">Sign in</Link>
-          <Link href="/build" className="btn btn-primary btn-sm">Build my dashboard</Link>
+          <Link href="/stone" className="btn btn-quiet btn-sm max-sm:!px-2.5">Sign in</Link>
+          <Link href="/build" className="btn btn-primary btn-sm max-sm:!px-2.5"><span className="sm:hidden">Get started</span><span className="hidden sm:inline">Build my dashboard</span></Link>
         </div>
       </header>
 
