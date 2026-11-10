@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Lock } from "lucide-react";
 import Logo from "@/components/Logo";
 import Reveal from "@/components/Reveal";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -7,6 +7,7 @@ import { ClusterLinks, HeroPreview, ModuleExplorer } from "@/components/Landing"
 import { PLANS } from "@/lib/pricing";
 import IndustryGrid from "@/components/Industries";
 import TrustedBy from "@/components/TrustedBy";
+import Privacy from "@/components/Privacy";
 
 const d = (ms: number) => ({ ["--d" as string]: `${ms}ms` }) as React.CSSProperties;
 
@@ -22,6 +23,7 @@ export default function Home() {
           <a href="#modules" className="hover:text-ink">Modules</a>
           <a href="#clusters" className="hover:text-ink">Samples</a>
           <a href="#pricing" className="hover:text-ink">Pricing</a>
+          <a href="#privacy" className="inline-flex items-center gap-1.5 hover:text-ink"><Lock size={14} /> Privacy</a>
           <Link href="/contact" className="hover:text-ink">Contact</Link>
         </nav>
         <div className="ml-auto flex items-center gap-2">
@@ -48,6 +50,8 @@ export default function Home() {
         </section>
 
         <TrustedBy />
+
+        <Privacy />
 
         <section id="industries" className="mx-auto max-w-7xl px-5 pb-28 sm:px-8 lg:pb-36">
           <div className="grid gap-6 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-end lg:gap-16">
