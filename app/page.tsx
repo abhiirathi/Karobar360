@@ -32,6 +32,15 @@ export default function Home() {
           <Link href="/build" className="btn btn-primary btn-sm max-sm:!px-2.5"><span className="sm:hidden">Get started</span><span className="hidden sm:inline">Build my dashboard</span></Link>
         </div>
       </header>
+      {/* Phones: the section links as one scrolling row under the header */}
+      <nav aria-label="Sections" className="mx-auto -mt-2 flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-w-7xl gap-5 overflow-x-auto whitespace-nowrap px-5 pb-2 text-[0.92rem] text-ink-2 md:hidden">
+        <a href="#industries" className="py-1.5 hover:text-ink">Industries</a>
+        <a href="#how" className="py-1.5 hover:text-ink">How it works</a>
+        <a href="#modules" className="py-1.5 hover:text-ink">Modules</a>
+        <a href="#pricing" className="py-1.5 hover:text-ink">Pricing</a>
+        <a href="#privacy" className="inline-flex items-center gap-1 py-1.5 hover:text-ink"><Lock size={13} /> Privacy</a>
+        <Link href="/contact" className="py-1.5 hover:text-ink">Contact</Link>
+      </nav>
 
       <main>
         <section className="mx-auto grid max-w-7xl items-center gap-14 px-5 pb-16 pt-14 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:pt-20">

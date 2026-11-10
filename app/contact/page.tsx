@@ -9,12 +9,12 @@ export const metadata: Metadata = { title: "Contact us · Karobar360", descripti
 export default function Contact() {
   return (
     <>
-      <header className="mx-auto flex max-w-7xl items-center gap-8 px-5 py-5 sm:px-8">
+      <header className="mx-auto flex max-w-7xl items-center gap-2 px-5 py-5 sm:gap-8 sm:px-8">
         <Logo />
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1 sm:gap-2">
           <ThemeToggle />
-          <Link href="/stone" className="btn btn-quiet btn-sm">Sign in</Link>
-          <Link href="/stone/demo" className="btn btn-primary btn-sm">Open the demo</Link>
+          <Link href="/stone" className="btn btn-quiet btn-sm max-sm:!px-2.5">Sign in</Link>
+          <Link href="/stone/demo" className="btn btn-primary btn-sm max-sm:!px-2.5"><span className="sm:hidden">Demo</span><span className="hidden sm:inline">Open the demo</span></Link>
         </div>
       </header>
       <main className="mx-auto grid max-w-7xl gap-12 px-5 pb-28 pt-10 sm:px-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-20 lg:pt-16">

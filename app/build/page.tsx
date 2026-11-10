@@ -60,16 +60,16 @@ export default function Build() {
       <header className="flex items-center gap-4 py-5">
         <Logo />
         <div className="ml-auto flex items-center gap-2">
-          <span className="hidden text-sm text-ink-3 sm:inline">{aiOn === null ? "" : aiOn ? "Gemini connected" : "Rules engine (add Gemini key for AI)"}</span>
+          <span className="hidden text-sm text-ink-3 sm:inline">{aiOn ? "AI assist on" : ""}</span>
           <ThemeToggle />
         </div>
       </header>
 
-      <div className="mt-10 grid gap-10 lg:grid-cols-[240px_1fr]">
-        <aside className="lg:sticky lg:top-8 lg:self-start">
+      <div className="mt-10 grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="min-w-0 lg:sticky lg:top-8 lg:self-start">
           <h1 className="display text-4xl font-semibold">Build your dashboard</h1>
           <p className="mt-3 text-ink-2">About five minutes. Nothing is shared until you send the proposal.</p>
-          <ol className="mt-8 flex gap-1 overflow-x-auto lg:flex-col">
+          <ol className="scroll-thin -mx-1 mt-8 flex gap-1 overflow-x-auto px-1 pb-1 lg:flex-col">
             {SECTIONS.map((s, i) => (
               <li key={s}>
                 <button onClick={() => (i <= sec || valid.slice(0, i).every(Boolean)) && setSec(i)} className={`focusable flex w-full items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2 text-left text-sm transition-colors ${i === sec ? "bg-surface font-medium" : "text-ink-2 hover:bg-surface/60"}`}>
