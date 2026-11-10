@@ -169,7 +169,11 @@ export default function Privacy() {
   useEffect(() => {
     const el = box.current;
     if (!el || !("IntersectionObserver" in window)) return;
-    const io = new IntersectionObserver(([e]) => setVisible(e.isIntersecting), { threshold: 0.2 });
+    // Plays by itself the first time most of the stage scrolls into view; pauses when it leaves.
+    const io = new IntersectionObserver(([e]) => {
+      setVisible(e.isIntersecting);
+      if (e.intersectionRatio >= 0.6) setPhase((p) => (p === "idle" ? "locking" : p));
+    }, { threshold: [0, 0.2, 0.6] });
     io.observe(el);
     return () => io.disconnect();
   }, []);
@@ -205,7 +209,7 @@ export default function Privacy() {
         <div>
           <p className="reveal text-sm font-medium uppercase tracking-[0.14em]" style={{ color: GREEN }}>Data privacy</p>
           <h2 className="display reveal mt-4 text-[2.6rem] font-semibold sm:text-[3.6rem]">Your business stays yours.</h2>
-          <p className="reveal mt-6 max-w-[40ch] text-lg text-night-ink/70">Sales, rates and parties are the most private numbers you have. Tap the lock to see how Karobar360 keeps them that way.</p>
+          <p className="reveal mt-6 max-w-[40ch] text-lg text-night-ink/70">Sales, rates and parties are the most private numbers you have. Here is how Karobar360 keeps them that way.</p>
 
           <ol className="mt-10 space-y-1">
             {STEPS.map((s, i) => {
