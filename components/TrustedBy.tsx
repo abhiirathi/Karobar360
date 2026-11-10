@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 // "Trusted by" strip under the hero: customer logos in their own colours, scrolling slowly and pausing on hover.
 const LOGOS = [
   { name: "World Class", src: "/logos/world-class.png", w: 403 },
@@ -17,8 +19,8 @@ export default function TrustedBy() {
           <ul className="sr-only">{LOGOS.map((l) => <li key={l.name}>{l.name}</li>)}</ul>
           <div className="marquee-track flex w-max items-center" aria-hidden>
             {[...set, ...set].map((l, i) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img key={i} src={l.src} alt="" title={l.name} height={H} width={Math.round((l.w / 160) * H)} loading="lazy" draggable={false}
+              // next/image serves small WebP copies of the logo PNGs
+              <Image key={i} src={l.src} alt="" title={l.name} height={H} width={Math.round((l.w / 160) * H)} sizes="160px" loading="lazy" draggable={false}
                 className={`mx-10 block shrink-0 select-none opacity-90 transition-opacity hover:opacity-100 sm:mx-14 ${l.darkInvert ? "dark:invert" : ""}`}
                 style={{ height: H, width: Math.round((l.w / 160) * H) }} />
             ))}
