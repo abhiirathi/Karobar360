@@ -8,6 +8,7 @@ import { PLANS } from "@/lib/pricing";
 import IndustryGrid from "@/components/Industries";
 import TrustedBy from "@/components/TrustedBy";
 import Privacy from "@/components/Privacy";
+import InstallApp from "@/components/InstallApp";
 
 const d = (ms: number) => ({ ["--d" as string]: `${ms}ms` }) as React.CSSProperties;
 
@@ -17,7 +18,7 @@ export default function Home() {
       <Reveal />
       <header className="mx-auto flex max-w-7xl items-center gap-2 px-5 py-5 sm:gap-8 sm:px-8">
         <Logo />
-        <nav className="hidden items-center gap-7 text-[0.95rem] text-ink-2 md:flex">
+        <nav className="hidden items-center gap-7 whitespace-nowrap text-[0.95rem] text-ink-2 xl:flex">
           <a href="#industries" className="hover:text-ink">Industries</a>
           <a href="#how" className="hover:text-ink">How it works</a>
           <a href="#modules" className="hover:text-ink">Modules</a>
@@ -33,7 +34,7 @@ export default function Home() {
         </div>
       </header>
       {/* Phones: the section links as one scrolling row under the header */}
-      <nav aria-label="Sections" className="mx-auto -mt-2 flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-w-7xl gap-5 overflow-x-auto whitespace-nowrap px-5 pb-2 text-[0.92rem] text-ink-2 md:hidden">
+      <nav aria-label="Sections" className="mx-auto -mt-2 flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-w-7xl gap-5 overflow-x-auto whitespace-nowrap px-5 pb-2 text-[0.92rem] text-ink-2 xl:hidden">
         <a href="#industries" className="py-1.5 hover:text-ink">Industries</a>
         <a href="#how" className="py-1.5 hover:text-ink">How it works</a>
         <a href="#modules" className="py-1.5 hover:text-ink">Modules</a>
@@ -52,6 +53,7 @@ export default function Home() {
             <div className="reveal mt-10 flex flex-wrap items-center gap-3" style={d(160)}>
               <Link href="/build" className="btn btn-primary !px-6 !py-3.5 text-base">Build my dashboard <ArrowRight size={18} /></Link>
               <Link href="/stone/demo" className="btn btn-quiet !px-6 !py-3.5 text-base">Open the stone dashboard</Link>
+              <InstallApp className="!px-6 !py-3.5 text-base" />
             </div>
             <p className="reveal mt-6 text-sm text-ink-3" style={d(220)}>Works with Tally, Busy, Excel and WhatsApp. No credit card.</p>
           </div>
