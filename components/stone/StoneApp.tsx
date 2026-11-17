@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BookOpenCheck, Boxes, Building2, Check, ChevronDown, ChevronsUpDown, Globe, IndianRupee, LifeBuoy, Factory, ReceiptText, HardHat, LayoutDashboard, LogOut, Mountain, Package, Settings, ShoppingCart, UserCog, Users } from "lucide-react";
 import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
+import InstallApp from "@/components/InstallApp";
 import { useStone, type StoneMode } from "@/lib/stone/store";
 import { level, roleLabel, type AreaKey, type Level, type Me, type Perms } from "@/lib/stone/perm";
 import { hasBlocks, jobOnly, modulesOf } from "@/lib/stone/modules";
@@ -183,6 +184,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
         <div className="flex items-center gap-3 px-4 py-3 lg:px-5 lg:pt-5">
           <Logo />
           <div className="ml-auto flex items-center gap-2 lg:hidden">
+            <InstallApp variant="icon" />
             <ThemeToggle />
             {mode === "cloud" && <button onClick={signOut} className="btn btn-quiet btn-sm" aria-label="Sign out"><LogOut size={14} /></button>}
           </div>
@@ -249,6 +251,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
               <button onClick={signOut} className="mt-1.5 inline-flex items-center gap-1.5 text-ink-2 hover:text-ink"><LogOut size={13} />Sign out</button>
             </div>
           )}
+          <InstallApp variant="link" className="text-ink-2" />
           <div className="flex items-center gap-3"><ThemeToggle />{nav.some((n) => n.key === "services") ? <button onClick={() => go("services", "contact")} className="hover:text-ink">Contact us</button> : <Link href="/contact" className="hover:text-ink">Contact us</Link>}<Link href="/" className="hover:text-ink">All industries</Link></div>
         </div>
       </aside>

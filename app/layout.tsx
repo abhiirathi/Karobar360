@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 import { SITE_URL } from "@/lib/site";
+import { AppSetup } from "@/components/InstallApp";
 
 const description = "Describe how your factory, warehouse or trading business runs. Karobar360 builds a dashboard for sales, finance, stock, production, staff, payroll and GST, in English or Hindi.";
 
@@ -13,6 +14,8 @@ export const metadata: Metadata = {
   // Link previews on WhatsApp, LinkedIn and X; the image comes from app/opengraph-image.tsx.
   openGraph: { type: "website", siteName: "Karobar360", title: "Karobar360: software that runs your way", description, url: "/", locale: "en_IN" },
   twitter: { card: "summary_large_image", title: "Karobar360: software that runs your way", description },
+  // Installed on iPhone or iPad from Safari: full screen, with this name under the icon.
+  appleWebApp: { capable: true, title: "Karobar360", statusBarStyle: "default" },
 };
 
 // Browser bar colour follows the page background in light and dark mode.
@@ -31,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: boot }} />
       </head>
-      <body className="min-h-screen bg-ground text-ink">{children}</body>
+      <body className="min-h-screen bg-ground text-ink"><AppSetup />{children}</body>
     </html>
   );
 }
