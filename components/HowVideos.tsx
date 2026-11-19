@@ -26,9 +26,7 @@ export default function HowVideos() {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] lg:gap-10">
       <div className="flex min-w-0 flex-col">
-        <h3 className="text-2xl font-semibold tracking-tight">Watch one block go from quarry to customer.</h3>
-        <p className="mt-3 max-w-[40ch] text-ink-2">Three short videos in Hindi follow block MW&#8209;233 from a mine in Rajsamand, through a gang-saw unit in Kishangarh, to a depot in Marble Mandi.</p>
-        <div role="tablist" aria-label="Walkthrough videos" className="mt-8 flex flex-col gap-1.5">
+        <div role="tablist" aria-label="Walkthrough videos" className="flex flex-col gap-1.5">
           {VIDEOS.map((x, n) => (
             <button
               key={x.key}

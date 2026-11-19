@@ -96,22 +96,11 @@ export default function Home() {
         </section>
 
         <section id="how" className="mx-auto max-w-7xl px-5 py-32 sm:px-8 lg:py-40">
-          <h2 className="display reveal max-w-3xl text-[2.6rem] font-semibold sm:text-[3.6rem]">From a conversation to a dashboard.</h2>
-          <div className="mt-20 grid gap-14 md:grid-cols-[1.2fr_1fr_1fr] md:gap-10">
-            <div className="reveal" style={d(0)}>
-              <div className="text-2xl font-semibold tracking-tight">Describe</div>
-              <p className="mt-3 max-w-[38ch] text-ink-2">Fill a short form, or just speak: “हम भीलवाड़ा में सूटिंग बनाते हैं, 200 लोग हैं, जॉब-वर्क का हिसाब नहीं मिलता.” Gemini fills in the details for you.</p>
-            </div>
-            <div className="reveal md:pt-16" style={d(90)}>
-              <div className="text-2xl font-semibold tracking-tight">Build</div>
-              <p className="mt-3 max-w-[34ch] text-ink-2">The AI architect picks your modules, writes your KPIs and alerts, and builds custom trackers from your requests.</p>
-            </div>
-            <div className="reveal md:pt-32" style={d(180)}>
-              <div className="text-2xl font-semibold tracking-tight">Run</div>
-              <p className="mt-3 max-w-[34ch] text-ink-2">Connect your books. Owners get an 8 am WhatsApp brief, and anyone can ask the copilot questions in Hindi.</p>
-            </div>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-end lg:gap-16">
+            <h2 className="display reveal text-[2.6rem] font-semibold sm:text-[3.6rem]">One block, from quarry to customer.</h2>
+            <p className="reveal max-w-[44ch] text-lg text-ink-2" style={d(80)}>Three short videos in Hindi follow block MW&#8209;233 from a mine in Rajsamand, through a gang-saw unit in Kishangarh, to a depot in Marble Mandi.</p>
           </div>
-          <div className="reveal mt-24 lg:mt-32" style={d(120)}><HowVideos /></div>
+          <div className="reveal mt-16" style={d(120)}><HowVideos /></div>
         </section>
 
         <section id="modules" className="bg-surface-2/60">
