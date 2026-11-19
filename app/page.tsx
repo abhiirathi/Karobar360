@@ -96,10 +96,7 @@ export default function Home() {
         </section>
 
         <section id="how" className="mx-auto max-w-7xl px-5 py-32 sm:px-8 lg:py-40">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-end lg:gap-16">
-            <h2 className="display reveal text-[2.6rem] font-semibold sm:text-[3.6rem]">One block, from quarry to customer.</h2>
-            <p className="reveal max-w-[44ch] text-lg text-ink-2" style={d(80)}>Three short videos in Hindi follow block MW&#8209;233 from a mine in Rajsamand, through a gang-saw unit in Kishangarh, to a depot in Marble Mandi.</p>
-          </div>
+          <h2 className="display reveal max-w-3xl text-[2.6rem] font-semibold sm:text-[3.6rem]">One block, from quarry to customer.</h2>
           <div className="reveal mt-16" style={d(120)}><HowVideos /></div>
         </section>
 
