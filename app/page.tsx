@@ -9,6 +9,7 @@ import IndustryGrid from "@/components/Industries";
 import TrustedBy from "@/components/TrustedBy";
 import Privacy from "@/components/Privacy";
 import InstallApp from "@/components/InstallApp";
+import HowVideos from "@/components/HowVideos";
 
 const d = (ms: number) => ({ ["--d" as string]: `${ms}ms` }) as React.CSSProperties;
 
@@ -110,6 +111,7 @@ export default function Home() {
               <p className="mt-3 max-w-[34ch] text-ink-2">Connect your books. Owners get an 8 am WhatsApp brief, and anyone can ask the copilot questions in Hindi.</p>
             </div>
           </div>
+          <div className="reveal mt-24 lg:mt-32" style={d(120)}><HowVideos /></div>
         </section>
 
         <section id="modules" className="bg-surface-2/60">
