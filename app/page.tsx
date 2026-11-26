@@ -4,7 +4,7 @@ import Logo from "@/components/Logo";
 import Reveal from "@/components/Reveal";
 import ThemeToggle from "@/components/ThemeToggle";
 import { ClusterLinks, HeroPreview, ModuleExplorer } from "@/components/Landing";
-import { PLANS } from "@/lib/pricing";
+import Pricing from "@/components/Pricing";
 import IndustryGrid from "@/components/Industries";
 import TrustedBy from "@/components/TrustedBy";
 import Privacy from "@/components/Privacy";
@@ -147,51 +147,8 @@ export default function Home() {
         </section>
 
         <section id="pricing" className="mx-auto max-w-7xl px-5 py-32 sm:px-8 lg:py-40">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
-            <h2 className="display reveal text-[2.6rem] font-semibold sm:text-[3.6rem]">Priced like a salary, not a software project.</h2>
-            <p className="reveal max-w-[46ch] self-end text-lg text-ink-2" style={d(80)}>A one-time setup covers onboarding, data import and training. After that you pay monthly, and annual billing gets two months free.</p>
-          </div>
-          <div className="reveal scroll-thin mt-16 overflow-x-auto" style={d(120)}>
-            <table className="w-full min-w-[680px] text-left">
-              <thead>
-                <tr>
-                  <th className="w-1/4 pb-6" />
-                  {PLANS.map((p) => (
-                    <th key={p.key} className={`pb-6 align-bottom ${p.key === "growth" ? "rounded-t-2xl bg-surface px-5 pt-6" : "px-5"}`}>
-                      <div className="text-lg font-semibold">{p.name}</div>
-                      <div className="num mt-1 text-3xl font-semibold tracking-tight">₹{p.monthly.toLocaleString("en-IN")}<span className="text-base font-normal text-ink-3">/mo</span></div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="text-ink-2">
-                {[
-                  ["Modules", "Up to 4", "Up to 8", "All 11 + custom"],
-                  ["Users", "5", "20", "60"],
-                  ["Sites", "1", "3", "Unlimited"],
-                  ["Tally / Busy / Excel import", "Yes", "Live sync", "Live sync"],
-                  ["WhatsApp alerts & owner brief", "—", "Yes", "Yes"],
-                  ["AI copilot (Hindi & English)", "50 questions/mo", "Unlimited", "Unlimited"],
-                  ["Custom modules", "—", "Add-on", "Included"],
-                  ["Support", "Email", "Phone & WhatsApp", "Dedicated manager"],
-                ].map((row) => (
-                  <tr key={row[0]}>
-                    <td className="py-3.5 pr-4 text-ink">{row[0]}</td>
-                    {row.slice(1).map((c, i) => <td key={i} className={`px-5 py-3.5 ${i === 1 ? "bg-surface" : ""}`}>{c}</td>)}
-                  </tr>
-                ))}
-                <tr>
-                  <td />
-                  {PLANS.map((p) => (
-                    <td key={p.key} className={`px-5 pb-6 pt-4 ${p.key === "growth" ? "rounded-b-2xl bg-surface" : ""}`}>
-                      <Link href="/build" className={`btn btn-sm ${p.key === "growth" ? "btn-primary" : "btn-quiet"}`}>Start with {p.name}</Link>
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-6 text-sm text-ink-3">Setup starts at ₹35,000. Prices exclude GST. <Link href="/pricing" className="text-accent hover:underline">See what each plan includes, or ask for a custom price</Link>.</p>
+          <h2 className="display reveal mb-12 text-[2.6rem] font-semibold sm:text-[3.6rem]">Pricing</h2>
+          <div className="reveal" style={d(80)}><Pricing /></div>
         </section>
 
         <section className="bg-accent text-accent-ink">

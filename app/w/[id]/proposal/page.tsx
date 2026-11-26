@@ -8,7 +8,8 @@ import { getWorkspace } from "@/lib/store";
 import { MODULE_MAP, INTEGRATIONS } from "@/lib/catalog";
 import { getIndustry } from "@/lib/industries";
 import { quote } from "@/lib/pricing";
-import { fullDate, inr } from "@/lib/format";
+import { fullDate } from "@/lib/format";
+import { SALES } from "@/lib/contact";
 import Logo from "@/components/Logo";
 
 export default function Proposal() {
@@ -19,7 +20,6 @@ export default function Proposal() {
   const q = quote(bp);
   const ind = getIndustry(bp.intake.industry);
   const valid = new Date(Date.now() + 30 * 86400000);
-  const rupee = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
   return (
     <div className="min-h-screen bg-ground print:bg-white">
@@ -73,34 +73,15 @@ export default function Proposal() {
         </section>
 
         <section className="mt-12">
-          <h2 className="text-xl font-semibold tracking-tight">Investment</h2>
-          <table className="mt-4 w-full text-left">
-            <tbody>
-              {q.lines.map((l, i) => (
-                <tr key={i} className="[&>td]:py-2">
-                  <td className="text-ink-2">{l.item}</td>
-                  <td className="num text-right">{rupee(l.amount)}</td>
-                </tr>
-              ))}
-              <tr className="[&>td]:pt-4 [&>td]:font-semibold">
-                <td>One-time setup</td>
-                <td className="num text-right">{rupee(q.setup)}</td>
-              </tr>
-            </tbody>
-          </table>
+          <h2 className="text-xl font-semibold tracking-tight">What setup covers</h2>
+          <ul className="mt-4 space-y-2 text-ink-2">
+            {q.lines.map((l, i) => <li key={i} className="flex gap-2"><span className="text-accent">•</span>{l.item}</li>)}
+          </ul>
           <div className="mt-8 rounded-2xl bg-surface-2 p-6">
-            <div className="flex flex-wrap items-baseline justify-between gap-4">
-              <div>
-                <div className="text-lg font-semibold">{q.plan.name} plan</div>
-                <div className="text-sm text-ink-2">{q.plan.features.join(" · ")}{q.extraUsers ? ` · ${q.extraUsers} extra users` : ""}</div>
-              </div>
-              <div className="sm:text-right">
-                <div className="num text-3xl font-semibold tracking-tight">{rupee(q.monthly)}<span className="text-base font-normal text-ink-3"> / month</span></div>
-                <div className="num text-sm text-ink-2">or {rupee(q.annual)} / year — two months free</div>
-              </div>
-            </div>
+            <div className="text-lg font-semibold">Pricing</div>
+            <p className="mt-1 text-ink-2">Custom for your business, based on your firms, team size and setup. Contact us for details and a written quote.</p>
+            <p className="num mt-3 text-sm font-medium">{SALES.phoneLabel} · {SALES.email}</p>
           </div>
-          <p className="mt-4 text-sm text-ink-3">Prices exclude 18% GST. First-year total on annual billing: {inr(q.setup + q.annual)} + GST.</p>
         </section>
 
         <section className="mt-12 text-sm text-ink-2">

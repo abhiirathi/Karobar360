@@ -4,7 +4,7 @@ import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import Pricing from "@/components/Pricing";
 
-export const metadata: Metadata = { title: "Pricing · Karobar360", description: "Simple monthly plans for stone quarries, processing units and depots, or a custom plan for your group." };
+export const metadata: Metadata = { title: "Pricing · Karobar360", description: "Custom pricing for stone mines, manufacturing units and distributors. Contact us for details." };
 
 export default function PricingPage() {
   return (
@@ -18,7 +18,7 @@ export default function PricingPage() {
         </div>
       </header>
       <main className="mx-auto max-w-7xl px-5 pb-28 pt-8 sm:px-8 lg:pt-12">
-        <h1 className="display mb-6 text-[2.6rem] font-semibold sm:text-[3.4rem]">Simple pricing.</h1>
+        <h1 className="display mb-6 text-[2.6rem] font-semibold sm:text-[3.4rem]">Pricing</h1>
         <Pricing />
       </main>
     </>
