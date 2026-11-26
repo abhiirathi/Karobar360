@@ -1,11 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Check } from "lucide-react";
+import { ArrowLeft, Check, Factory, Mountain, Store } from "lucide-react";
 import Logo from "@/components/Logo";
 import InstallApp from "@/components/InstallApp";
 import { STATES } from "@/lib/stone/calc";
-import { BUSINESS_PRESETS, MODULE_INFO, presetModules } from "@/lib/stone/modules";
-import type { Modules } from "@/lib/stone/types";
 
 type AuthInfo = { pending: { email: string; name: string } | null; google: boolean; email: boolean };
 
@@ -150,23 +148,37 @@ function GoogleMark() {
   );
 }
 
+type Biz = "mine" | "processing" | "distribution";
+const BIZ: { key: Biz; label: string; hint: string; icon: typeof Mountain; suffix: string }[] = [
+  { key: "mine", label: "Mine", hint: "Quarry: blocks extracted, rawanna, diesel and wire per tonne", icon: Mountain, suffix: "Mines" },
+  { key: "processing", label: "Manufacturing", hint: "Unit: block yard, gang saws, slabs, lots and cost per sq ft", icon: Factory, suffix: "Manufacturing" },
+  { key: "distribution", label: "Distribution", hint: "Depot or showroom: slab stock by rack, sales, dealers", icon: Store, suffix: "Distribution" },
+];
+
+/** One parent account; the owner ticks the businesses it runs and each becomes its own firm. */
 function Signup({ onDone, verified, onRestart }: { onDone: () => void; verified: { email: string; name: string }; onRestart: () => void }) {
   const [step, setStep] = useState(1);
-  const [mods, setMods] = useState<Modules>(presetModules({ buyBlocks: true, processing: true, depot: true }));
-  const [preset, setPreset] = useState("processor");
-  const [f, setF] = useState({ company: "", city: "Kishangarh", state: "08", gstin: "", name: verified.name, phone: "" });
+  const [picked, setPicked] = useState<Biz[]>([]);
+  const [f, setF] = useState({ company: "", city: "Kishangarh", state: "08", name: verified.name, phone: "" });
+  // Business names follow the parent name until the owner types their own.
+  const [names, setNames] = useState<Partial<Record<Biz, string>>>({});
+  const [gstins, setGstins] = useState<Partial<Record<Biz, string>>>({});
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
-  const any = Object.values(mods).some(Boolean);
+  const order = BIZ.filter((b) => picked.includes(b.key));
+  const nameOf = (b: (typeof BIZ)[number]) => names[b.key] ?? (picked.length === 1 ? f.company : f.company ? `${f.company} ${b.suffix}` : "");
+  const toggle = (k: Biz) => setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const businesses = order.map((b) => ({ kind: b.key, name: nameOf(b).trim(), gstin: (gstins[b.key] ?? "").trim() }));
+    if (businesses.some((b) => !b.name)) return setErr("Give each business a name.");
     setBusy(true);
     setErr("");
     const r = await fetch("/api/auth/onboard", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ company: f.company, name: f.name, setup: { modules: mods, city: f.city, state: f.state, gstin: f.gstin, phone: f.phone } }),
+      body: JSON.stringify({ company: f.company, name: f.name, setup: { city: f.city, state: f.state, phone: f.phone, businesses } }),
     }).catch(() => null);
     const j = await r?.json().catch(() => ({}));
     setBusy(false);
@@ -176,60 +188,62 @@ function Signup({ onDone, verified, onRestart }: { onDone: () => void; verified:
 
   return (
     <div className="mt-10 rounded-[22px] bg-surface p-6 sm:p-8">
-      {(
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-accent-soft px-4 py-3 text-sm">
-          <span className="inline-flex items-center gap-2"><Check size={15} className="text-accent" />Signed in as <span className="font-medium">{verified.email}</span></span>
-          <button type="button" onClick={onRestart} className="text-ink-2 underline-offset-4 hover:underline">Not you?</button>
-        </div>
-      )}
-      <div className="text-sm text-ink-3">{`Set up your company · step ${step} of 2`}</div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-accent-soft px-4 py-3 text-sm">
+        <span className="inline-flex min-w-0 items-center gap-2"><Check size={15} className="shrink-0 text-accent" /><span className="truncate">Signed in as <span className="font-medium">{verified.email}</span></span></span>
+        <button type="button" onClick={onRestart} className="text-ink-2 underline-offset-4 hover:underline">Not you?</button>
+      </div>
+      <div className="text-sm text-ink-3">Set up your account · step {step} of 2</div>
       {step === 1 ? (
         <>
-          <h1 className="mt-1 text-[1.6rem] font-semibold tracking-tight">What does your business do?</h1>
-          <p className="mt-1 text-ink-2">Your dashboard shows only these parts. You can change this later in Settings.</p>
-          <div className="mt-5 grid gap-2 sm:grid-cols-2">
-            {BUSINESS_PRESETS.map((p) => (
-              <button key={p.key} type="button" onClick={() => { setPreset(p.key); setMods(presetModules(p.m)); }}
-                className={`focusable rounded-2xl border px-4 py-3 text-left transition-colors ${preset === p.key ? "border-accent bg-accent-soft" : "border-surface-2 hover:bg-surface-2"}`}>
-                <div className="font-medium">{p.label}</div>
-                <div className="text-[0.84rem] text-ink-2">{p.blurb}</div>
-              </button>
-            ))}
+          <h1 className="mt-1 text-[1.6rem] font-semibold tracking-tight">Which businesses do you run?</h1>
+          <p className="mt-1 text-ink-2">Tick every one that applies. Each gets its own GSTIN, invoices and dashboard, all under one account you control.</p>
+          <div className="mt-5 grid gap-2.5">
+            {BIZ.map((b) => {
+              const on = picked.includes(b.key);
+              const Icon = b.icon;
+              return (
+                <button key={b.key} type="button" role="checkbox" aria-checked={on} onClick={() => toggle(b.key)}
+                  className={`focusable flex items-center gap-4 rounded-2xl border px-4 py-4 text-left transition-colors ${on ? "border-accent bg-accent-soft" : "border-surface-2 hover:bg-surface-2"}`}>
+                  <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${on ? "bg-accent text-accent-ink" : "bg-surface-2 text-ink-2"}`}><Icon size={20} /></span>
+                  <span className="min-w-0 flex-1"><span className="block font-semibold">{b.label}</span><span className="block text-[0.86rem] text-ink-2">{b.hint}</span></span>
+                  <span aria-hidden className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border-2 ${on ? "border-accent bg-accent text-accent-ink" : "border-ink-3/40"}`}>{on && <Check size={14} strokeWidth={3} />}</span>
+                </button>
+              );
+            })}
           </div>
-          <div className="mt-6 text-sm font-medium">Fine-tune</div>
-          <ul className="mt-2 divide-y divide-surface-2">
-            {MODULE_INFO.map((m) => (
-              <li key={m.key}>
-                <label className="flex cursor-pointer items-start gap-3 py-2.5">
-                  <input type="checkbox" className="mt-1 h-4 w-4 accent-[var(--accent)]" checked={mods[m.key]} onChange={(e) => { setPreset(""); setMods({ ...mods, [m.key]: e.target.checked }); }} />
-                  <span><span className="font-medium">{m.label}</span><span className="block text-[0.84rem] text-ink-2">{m.hint}</span></span>
-                </label>
-              </li>
-            ))}
-          </ul>
-          <button className="btn btn-primary mt-6 w-full justify-center" disabled={!any} onClick={() => setStep(2)}>Continue</button>
+          <p className="mt-3 text-[0.84rem] text-ink-3">{picked.length > 1 ? "Stone moves mine → manufacturing → distribution with a challan, and you see all of it together or one business at a time." : "You can add another business later in Settings."}</p>
+          <button className="btn btn-primary mt-6 w-full justify-center" disabled={!picked.length} onClick={() => setStep(2)}>Continue</button>
         </>
       ) : (
         <form onSubmit={submit}>
-          <button type="button" onClick={() => setStep(1)} className="mt-1 inline-flex items-center gap-1 text-sm text-ink-2 hover:text-ink"><ArrowLeft size={14} />Business type</button>
-          <h1 className="mt-2 text-[1.6rem] font-semibold tracking-tight">Your company</h1>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {MODULE_INFO.filter((m) => mods[m.key]).map((m) => <span key={m.key} className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2.5 py-1 text-xs"><Check size={12} />{m.label.replace(/^We /, "")}</span>)}
-          </div>
+          <button type="button" onClick={() => setStep(1)} className="mt-1 inline-flex items-center gap-1 text-sm text-ink-2 hover:text-ink"><ArrowLeft size={14} />Businesses</button>
+          <h1 className="mt-2 text-[1.6rem] font-semibold tracking-tight">Your account</h1>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <Fld label="Company name" span><input className="field" value={f.company} onChange={set("company")} placeholder="Shree Shyam Marbles" required /></Fld>
+            <Fld label={picked.length > 1 ? "Group or parent company name" : "Company name"} span><input className="field" value={f.company} onChange={set("company")} placeholder="Vaid Group" required /></Fld>
             <Fld label="City"><input className="field" value={f.city} onChange={set("city")} /></Fld>
             <Fld label="State"><select className="field" value={f.state} onChange={set("state")}>{Object.entries(STATES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Fld>
-            <Fld label="GSTIN (optional)" span><input className="field uppercase" value={f.gstin} onChange={set("gstin")} maxLength={15} placeholder="08ABCDE1234F1Z5" /></Fld>
+            <Fld label="Your name"><input className="field" value={f.name} onChange={set("name")} required /></Fld>
+            <Fld label="Mobile (optional)" hint="Printed on invoices, not used to sign in"><input className="field" inputMode="tel" autoComplete="tel" value={f.phone} onChange={set("phone")} placeholder="98290 12345" /></Fld>
           </div>
-          <h2 className="mt-7 text-lg font-semibold">You, the owner</h2>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
-            <Fld label="Your name" span><input className="field" value={f.name} onChange={set("name")} required /></Fld>
-            <Fld label="Mobile number (optional)" hint="Printed on invoices and the catalogue, not used to sign in"><input className="field" inputMode="tel" autoComplete="tel" value={f.phone} onChange={set("phone")} placeholder="98290 12345" /></Fld>
-          </div>
+
+          <h2 className="mt-7 text-lg font-semibold">{picked.length > 1 ? "Your businesses" : "Your business"}</h2>
+          <ul className="mt-3 space-y-3">
+            {order.map((b) => {
+              const Icon = b.icon;
+              return (
+                <li key={b.key} className="rounded-2xl border border-surface-2 p-4">
+                  <div className="flex items-center gap-2 text-sm font-medium text-ink-2"><Icon size={15} />{b.label}</div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_200px]">
+                    <Fld label="Name"><input className="field" value={nameOf(b)} onChange={(e) => setNames({ ...names, [b.key]: e.target.value })} placeholder={`Vaid ${b.suffix}`} required /></Fld>
+                    <Fld label="GSTIN (optional)"><input className="field uppercase" value={gstins[b.key] ?? ""} onChange={(e) => setGstins({ ...gstins, [b.key]: e.target.value.toUpperCase() })} maxLength={15} placeholder="08ABCDE1234F1Z5" /></Fld>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
           {err && <p className="mt-4 text-sm text-neg" role="alert">{err}</p>}
-          <button className="btn btn-primary mt-6 w-full justify-center" disabled={busy}>{busy ? "Creating your workspace…" : "Create my workspace"}</button>
-          <p className="mt-4 text-[0.82rem] text-ink-3">Next: bring in your existing data with our Excel template, and add your munim, sales staff and yard team by email from the Team page. Have a mine, a unit and a depot as separate firms? Add them in Settings → Firms.</p>
+          <button className="btn btn-primary mt-6 w-full justify-center" disabled={busy}>{busy ? "Creating your account…" : "Create my account"}</button>
+          <p className="mt-4 text-[0.82rem] text-ink-3">Next: bring in your existing data with the Excel template, and add your inventory managers, sales team and munim by email from the Team page, choosing which business each one works in.</p>
         </form>
       )}
     </div>
