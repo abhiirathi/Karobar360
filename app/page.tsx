@@ -53,7 +53,7 @@ export default function Home() {
             </p>
             <div className="reveal mt-10 flex flex-wrap items-center gap-3" style={d(160)}>
               <Link href="/build" className="btn btn-primary !px-6 !py-3.5 text-base">Build my dashboard <ArrowRight size={18} /></Link>
-              <Link href="/stone/demo" className="btn btn-quiet !px-6 !py-3.5 text-base">Open the stone dashboard</Link>
+              <Link href="/stone" className="btn btn-quiet !px-6 !py-3.5 text-base">Sign in</Link>
               <InstallApp className="!px-6 !py-3.5 text-base" />
             </div>
             <p className="reveal mt-6 text-sm text-ink-3" style={d(220)}>Works with Tally, Busy, Excel and WhatsApp. No credit card.</p>

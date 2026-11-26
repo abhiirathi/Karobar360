@@ -14,7 +14,7 @@ export default function PricingPage() {
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
           <ThemeToggle />
           <Link href="/contact" className="btn btn-quiet btn-sm max-sm:!px-2.5">Contact</Link>
-          <Link href="/stone/demo" className="btn btn-primary btn-sm max-sm:!px-2.5"><span className="sm:hidden">Demo</span><span className="hidden sm:inline">Open the demo</span></Link>
+          <Link href="/stone" className="btn btn-primary btn-sm max-sm:!px-2.5">Sign in</Link>
         </div>
       </header>
       <main className="mx-auto max-w-7xl px-5 pb-28 pt-8 sm:px-8 lg:pt-12">

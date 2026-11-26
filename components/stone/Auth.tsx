@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { ArrowLeft, Check } from "lucide-react";
 import Logo from "@/components/Logo";
 import InstallApp from "@/components/InstallApp";
@@ -43,7 +42,6 @@ export default function Auth({ onDone }: { onDone: () => void }) {
           <Logo />
           <div className="flex items-center gap-4 text-sm text-ink-2">
             <InstallApp variant="link" />
-            <Link href="/stone/demo" className="underline-offset-4 hover:underline">Try the demo first</Link>
           </div>
         </div>
         {err && <p className="mt-6 rounded-2xl bg-neg-soft px-4 py-3 text-sm text-neg" role="alert">{err}</p>}
