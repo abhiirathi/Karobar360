@@ -91,7 +91,7 @@ export default function Pricing({ prefill }: { prefill?: { name?: string; compan
         <dl className="space-y-4 text-[0.92rem]">
           <div><dt className="font-medium">What does setup cost?</dt><dd className="mt-0.5 text-ink-2">From ₹35,000, once. We enter your opening stock, connect Tally and train your team.</dd></div>
           <div><dt className="font-medium">Can I change plans later?</dt><dd className="mt-0.5 text-ink-2">Yes, move up or down any month. Your data stays as it is.</dd></div>
-          <div><dt className="font-medium">Can I try it first?</dt><dd className="mt-0.5 text-ink-2">Open the demo company to try every section with sample data, free.</dd></div>
+          <div><dt className="font-medium">Can I try it first?</dt><dd className="mt-0.5 text-ink-2">Sign in with Google or your email, then load the sample company from the Overview to try every section, free.</dd></div>
         </dl>
       </div>
     </div>

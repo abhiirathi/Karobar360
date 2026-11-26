@@ -21,7 +21,7 @@ const INDUSTRIES: Ind[] = [
     clusters: "Kishangarh · Makrana · Rajsamand · Jalore",
     photo: "1551458601-14e8150ece4b",
     alt: "Terraced white marble quarry with cut blocks and a pool of green water",
-    href: "/stone/demo",
+    href: "/stone",
     live: true,
   },
   {
