@@ -8,6 +8,8 @@ export interface Perms {
   areas: Partial<Record<AreaKey, Level>>;
   costs: boolean; // purchase rates, cost per sq ft, margins
   team: boolean; // add people and set their access
+  /** Firms of the group this person works in (mine, unit, distribution). Missing or empty = every firm. */
+  firms?: string[];
 }
 
 export interface Me {
@@ -99,7 +101,7 @@ export const ROLES: { key: string; label: string; blurb: string; perms: Perms }[
 export function permsOf(me: Pick<Me, "isOwner" | "perms"> | null | undefined): Perms {
   if (!me) return { areas: {}, costs: false, team: false };
   if (me.isOwner) return ALL_EDIT;
-  return { areas: me.perms?.areas ?? {}, costs: !!me.perms?.costs, team: !!me.perms?.team };
+  return { areas: me.perms?.areas ?? {}, costs: !!me.perms?.costs, team: !!me.perms?.team, ...(me.perms?.firms?.length ? { firms: me.perms.firms } : {}) };
 }
 
 export function level(p: Perms, a: AreaKey): Level {
@@ -136,7 +138,10 @@ export function clampPerms(actor: Perms, actorIsOwner: boolean, want: Perms): Pe
     const mine = level(actor, a.key);
     areas[a.key] = rank[w] <= rank[mine] ? w : mine;
   }
-  return { areas, costs: !!want.costs && actor.costs, team: !!want.team && actorIsOwner };
+  // Firms: a manager limited to some firms can only give those firms (and must give at least one of them).
+  let firms = (want.firms ?? []).filter((f) => !actor.firms?.length || actor.firms.includes(f));
+  if (!firms.length && actor.firms?.length) firms = [...actor.firms];
+  return { areas, costs: !!want.costs && actor.costs, team: !!want.team && actorIsOwner, ...(firms.length ? { firms } : {}) };
 }
 
 export function roleLabel(key: string) {

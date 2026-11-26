@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronRight, KeyRound, Plus, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Plus } from "lucide-react";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { AREAS, ROLES, clampPerms, level, roleLabel, type AreaKey, type Level, type Me, type Perms } from "@/lib/stone/perm";
 import { hasBlocks, jobOnly } from "@/lib/stone/modules";
@@ -17,11 +17,6 @@ export function areasFor(m: Modules) {
   return AREAS.filter((a) => on[a.key]);
 }
 
-const genPass = () => {
-  const w = ["patthar", "marble", "khadan", "slab", "makrana", "kishan", "gangsaw", "granite"];
-  return `${w[Math.floor(Math.random() * w.length)]}${Math.floor(1000 + Math.random() * 9000)}`;
-};
-
 const LEVELS: { key: Level; label: string }[] = [{ key: "none", label: "Hidden" }, { key: "view", label: "View" }, { key: "edit", label: "Edit" }];
 
 /** One plain line instead of a row of badges. */
@@ -37,11 +32,11 @@ const DEMO_KEY = "k360-demo-team";
 const demoSeed = (owner: string): Me[] => {
   const mk = (id: string, name: string, login: string, role: string, extra: Partial<Me> = {}): Me => ({ id, orgId: "demo", orgName: "", name, login, role, perms: structuredClone(ROLES.find((r) => r.key === role)?.perms ?? ROLES[0].perms), isOwner: false, active: true, lastLogin: new Date(Date.now() - 86400000).toISOString(), ...extra });
   return [
-    { ...mk("d0", owner, "98290 11111", "owner"), isOwner: true, perms: ROLES[0].perms },
-    mk("d1", "Sunita Jain", "98290 22222", "accountant"),
-    mk("d2", "Imran Khan", "98290 33333", "sales"),
-    mk("d3", "Ramesh Gurjar", "98290 44444", "gate", { lastLogin: null }),
-    mk("d4", "Kalu Ram", "98290 55555", "yard", { active: false }),
+    { ...mk("d0", owner, "owner@yourcompany.in", "owner"), isOwner: true, perms: ROLES[0].perms },
+    mk("d1", "Sunita Jain", "sunita.accounts@gmail.com", "accountant"),
+    mk("d2", "Imran Khan", "imran.sales@gmail.com", "sales"),
+    mk("d3", "Ramesh Gurjar", "ramesh.gate@gmail.com", "gate", { lastLogin: null }),
+    mk("d4", "Kalu Ram", "kaluram.yard@gmail.com", "yard", { active: false }),
   ];
 };
 
@@ -50,7 +45,7 @@ export default function Team({ ctx }: { ctx: Ctx }) {
   const [users, setUsers] = useState<Me[] | null>(null);
   const [err, setErr] = useState("");
   const [edit, setEdit] = useState<Me | "new" | null>(null);
-  const [shared, setShared] = useState<{ name: string; login: string; password: string } | null>(null);
+  const [shared, setShared] = useState<{ name: string; login: string; invited: boolean } | null>(null);
   const [roles, setRoles] = useState(false);
   const areas = useMemo(() => areasFor(ctx.mods), [ctx.mods]);
 
@@ -74,7 +69,7 @@ export default function Team({ ctx }: { ctx: Ctx }) {
     <div className="max-w-[880px]">
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[260px] flex-1">
-          <p className="text-ink-2">Each person signs in with their own mobile number and sees only the sections you allow.</p>
+          <p className="text-ink-2">Add your inventory managers, sales team and munim by email. Each one signs in with Google or an email link, on the website or the installed app, and sees only the firms and sections you allow.</p>
         </div>
         <button className="btn btn-primary" onClick={() => setEdit("new")}><Plus size={16} />Add person</button>
       </div>
@@ -96,6 +91,7 @@ export default function Team({ ctx }: { ctx: Ctx }) {
                       {u.id === ctx.me?.id && <span className="text-[0.82rem] text-ink-3">you</span>}
                       <span className="text-[0.86rem] text-ink-2">{u.isOwner ? "Owner" : roleLabel(u.role)}</span>
                     </span>
+                    <span className="mt-0.5 block truncate text-[0.82rem] text-ink-3">{u.login}{ctx.firms.length > 1 && !u.isOwner && u.perms?.firms?.length ? ` · ${ctx.firms.filter((f) => u.perms.firms!.includes(f.id)).map((f) => f.name).join(", ")}` : ""}</span>
                     <span className="mt-0.5 block truncate text-[0.82rem] text-ink-3">{u.isOwner ? "Full access to everything" : accessLine(u.perms, areas)}</span>
                   </span>
                   <span className="hidden shrink-0 text-right text-[0.8rem] sm:block">
@@ -135,19 +131,19 @@ export default function Team({ ctx }: { ctx: Ctx }) {
         <PersonForm ctx={ctx} person={edit === "new" ? null : edit} areas={areas} demo={demo}
           onClose={() => setEdit(null)}
           onDemoSave={(u, remove) => saveDemo(remove ? people.filter((x) => x.id !== u.id) : people.some((x) => x.id === u.id) ? people.map((x) => (x.id === u.id ? u : x)) : [...people, u])}
-          onSaved={(u, pw) => { setEdit(null); load(); if (pw) setShared({ name: u.name, login: u.login, password: pw }); }}
+          onSaved={(u, isNew, invited) => { setEdit(null); load(); if (isNew) setShared({ name: u.name, login: u.login, invited }); }}
           onRemoved={() => { setEdit(null); load(); }} />
       )}
 
       {shared && (
-        <Drawer open title={`Login for ${shared.name}`} sub="Share this once. They can sign in from any phone." onClose={() => setShared(null)}
-          footer={<><a className="btn btn-primary" target="_blank" rel="noreferrer" href={`https://wa.me/${/^\d{10}$/.test(shared.login.replace(/\s/g, "")) ? `91${shared.login.replace(/\s/g, "")}` : ""}?text=${encodeURIComponent(`Karobar360 login for ${ctx.db.settings.company}\nOpen: ${appUrl}\nMobile: ${shared.login}\nPassword: ${shared.password}`)}`}><WhatsAppIcon size={15} />Send on WhatsApp</a><button className="btn btn-quiet" onClick={() => setShared(null)}>Done</button></>}>
+        <Drawer open title={`${shared.name} is added`} sub="No password needed. They sign in with their email." onClose={() => setShared(null)}
+          footer={<><a className="btn btn-primary" target="_blank" rel="noreferrer" href={`https://wa.me/?text=${encodeURIComponent(`You now have a Karobar360 login for ${ctx.db.settings.company}.\nOpen ${appUrl} and sign in with Google or "Email me a sign-in link" using ${shared.login}\nYou can install the app from the same page.`)}`}><WhatsAppIcon size={15} />Tell them on WhatsApp</a><button className="btn btn-quiet" onClick={() => setShared(null)}>Done</button></>}>
           <div className="rounded-2xl bg-surface p-4 text-[0.95rem]">
             <div className="text-ink-3">Open</div><div className="font-medium">{appUrl}</div>
-            <div className="mt-3 text-ink-3">Mobile / username</div><div className="num font-medium">{shared.login}</div>
-            <div className="mt-3 text-ink-3">Password</div><div className="num font-medium">{shared.password}</div>
+            <div className="mt-3 text-ink-3">Sign in with</div><div className="font-medium">{shared.login}</div>
+            <div className="mt-1 text-[0.86rem] text-ink-2">Continue with Google, or Email me a sign-in link</div>
           </div>
-          <div className="mt-3"><Note>{demo ? "Demo only: this login does not work. In your company account it does." : "The password is not shown again. If it is lost, set a new one from this page."}</Note></div>
+          <div className="mt-3"><Note>{demo ? "Demo only: no login is created and no email is sent." : shared.invited ? `We emailed ${shared.login} with these steps.` : "The invite email could not be sent; share the steps on WhatsApp instead."}</Note></div>
         </Drawer>
       )}
     </div>
@@ -156,14 +152,13 @@ export default function Team({ ctx }: { ctx: Ctx }) {
 
 function PersonForm({ ctx, person, areas, demo, onClose, onSaved, onRemoved, onDemoSave }: {
   ctx: Ctx; person: Me | null; areas: { key: AreaKey; label: string; hint: string }[]; demo: boolean;
-  onClose: () => void; onSaved: (u: Me, password: string | null) => void; onRemoved: () => void; onDemoSave: (u: Me, remove?: boolean) => void;
+  onClose: () => void; onSaved: (u: Me, isNew: boolean, invited: boolean) => void; onRemoved: () => void; onDemoSave: (u: Me, remove?: boolean) => void;
 }) {
   const isOwnerRow = !!person?.isOwner;
   const [name, setName] = useState(person?.name ?? "");
   const [login, setLogin] = useState(person?.login ?? "");
-  const [password, setPassword] = useState(person ? "" : genPass());
   const [role, setRole] = useState(person?.role ?? "sales");
-  const [perms, setPerms] = useState<Perms>(() => person && !person.isOwner ? { areas: { ...(person.perms?.areas ?? {}) }, costs: !!person.perms?.costs, team: !!person.perms?.team } : structuredClone(ROLES.find((r) => r.key === "sales")!.perms));
+  const [perms, setPerms] = useState<Perms>(() => person && !person.isOwner ? { areas: { ...(person.perms?.areas ?? {}) }, costs: !!person.perms?.costs, team: !!person.perms?.team, ...(person.perms?.firms?.length ? { firms: [...person.perms.firms] } : {}) } : structuredClone(ROLES.find((r) => r.key === "sales")!.perms));
   const [active, setActive] = useState(person?.active ?? true);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -176,24 +171,32 @@ function PersonForm({ ctx, person, areas, demo, onClose, onSaved, onRemoved, onD
   const pickRole = (k: string) => {
     setRole(k);
     const r = ROLES.find((x) => x.key === k);
-    if (r && k !== "custom") setPerms(structuredClone(r.perms));
+    if (r && k !== "custom") setPerms({ ...structuredClone(r.perms), ...(perms.firms?.length ? { firms: perms.firms } : {}) });
   };
   const setArea = (a: AreaKey, l: Level) => { setRole("custom"); setPerms({ ...perms, areas: { ...perms.areas, [a]: l } }); };
-  const ready = !!name.trim() && !!login.trim() && (!!person || password.length >= 6);
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(login.trim());
+  const ready = !!name.trim() && emailOk;
+  const firmsAll = ctx.firms;
+  const firmChoice = (mine.firms?.length ? firmsAll.filter((f) => mine.firms!.includes(f.id)) : firmsAll);
+  const toggleFirm = (id: string) => {
+    const cur = perms.firms ?? [];
+    const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+    setPerms({ ...perms, firms: next.length ? next : undefined });
+  };
 
   const save = async () => {
     if (demo) {
-      const u: Me = { ...(person ?? { id: `d${Date.now()}`, orgId: "demo", orgName: "", isOwner: false, lastLogin: null }), name, login, role, perms: limited, active } as Me;
+      const u: Me = { ...(person ?? { id: `d${Date.now()}`, orgId: "demo", orgName: "", isOwner: false, lastLogin: null }), name, login: login.trim().toLowerCase(), role, perms: limited, active } as Me;
       onDemoSave(u);
-      onSaved(u, person ? (password || null) : password);
+      onSaved(u, !person, false);
       return;
     }
     setBusy(true);
     setErr("");
-    const r = await fetch("/api/team", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: person?.id, name, login, password: password || null, role, perms: limited, active }) });
+    const r = await fetch("/api/team", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: person?.id, name, login, role, perms: limited, active }) });
     const j = await r.json().catch(() => ({}));
     setBusy(false);
-    if (r.ok) onSaved(j.user, password || null);
+    if (r.ok) onSaved(j.user, !person, !!j.invited);
     else setErr(j.error ?? "Could not save.");
   };
   const remove = async () => {
@@ -214,25 +217,40 @@ function PersonForm({ ctx, person, areas, demo, onClose, onSaved, onRemoved, onD
   return (
     <Drawer open wide title={person ? person.name : "Add a person"} sub={isOwnerRow ? "The owner always has full access." : undefined} onClose={onClose}
       footer={<>
-        <button className="btn btn-primary" disabled={busy || !ready} onClick={save}>{busy ? "Saving…" : person ? "Save" : "Add and share login"}</button>
+        <button className="btn btn-primary" disabled={busy || !ready} onClick={save}>{busy ? "Saving…" : person ? "Save" : "Add and send invite"}</button>
         <button className="btn btn-quiet" onClick={onClose}>Cancel</button>
         {err && <span className="text-sm text-neg">{err}</span>}
         {person && !isOwnerRow && person.id !== ctx.me?.id && (confirmDel
           ? <span className="ml-auto flex items-center gap-2 text-sm">Remove {person.name}?<button className="btn btn-quiet btn-sm !text-neg" onClick={remove}>Yes, remove</button><button className="btn btn-quiet btn-sm" onClick={() => setConfirmDel(false)}>No</button></span>
           : <button className="btn btn-quiet btn-sm ml-auto !text-neg" onClick={() => setConfirmDel(true)}>Remove</button>)}
       </>}>
-      <Step n={1} title="Who" sub={person ? undefined : "They sign in with this mobile number and password."} />
-      <Grid cols={3}>
+      <Step n={1} title="Who" sub={person ? undefined : "They sign in with this email, using Google or an email link. No password to share."} />
+      <Grid cols={2}>
         <F label="Name"><TextIn value={name} onChange={setName} placeholder="Ramesh Gurjar" /></F>
-        <F label="Mobile or username"><TextIn value={login} onChange={setLogin} placeholder="98290 12345" /></F>
-        <F label={person ? "New password" : "Password"} hint={person ? "Leave empty to keep it" : "Made for you; change it if you like"}>
-          <div className="flex gap-1.5"><TextIn value={password} onChange={setPassword} /><button type="button" className="btn btn-quiet btn-sm !px-2.5" title="Make a new password" onClick={() => setPassword(genPass())}>{person ? <KeyRound size={14} /> : <RefreshCw size={14} />}</button></div>
-        </F>
+        <F label="Email" err={login.trim() && !emailOk ? "Enter a full email address" : undefined}><TextIn type="email" value={login} onChange={setLogin} placeholder="ramesh@gmail.com" /></F>
       </Grid>
+
+      {!isOwnerRow && firmsAll.length > 1 && (
+        <>
+          <Step n={2} title="Which firms" sub="Pick the companies of your group this person works in. None picked means all firms." />
+          <div className="flex flex-wrap gap-2">
+            {firmChoice.map((f) => {
+              const on = !!perms.firms?.includes(f.id);
+              return (
+                <button key={f.id} type="button" aria-pressed={on} onClick={() => toggleFirm(f.id)}
+                  className={`focusable inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[0.9rem] transition-colors ${on ? "border-accent bg-accent-soft font-medium" : "border-surface-2 hover:bg-surface-2"}`}>
+                  {on && <Check size={14} className="text-accent" />}{f.name}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-[0.82rem] text-ink-3">{perms.firms?.length ? `Sees only ${firmsAll.filter((f) => perms.firms!.includes(f.id)).map((f) => f.name).join(", ")}.` : "Sees every firm and the group view."}</p>
+        </>
+      )}
 
       {!isOwnerRow && (
         <>
-          <Step n={2} title="Role" sub="Pick the closest one. It fills in the access below." />
+          <Step n={firmsAll.length > 1 ? 3 : 2} title="Role" sub="Pick the closest one. It fills in the access below." />
           <div className="grid gap-1.5 sm:grid-cols-2">
             {ROLES.filter((r) => r.key !== "custom").map((r) => (
               <label key={r.key} className={`flex cursor-pointer items-start gap-3 rounded-xl px-3 py-2.5 transition-colors ${role === r.key ? "bg-accent-soft" : "hover:bg-surface-2"}`}>
@@ -243,7 +261,7 @@ function PersonForm({ ctx, person, areas, demo, onClose, onSaved, onRemoved, onD
           </div>
           {role === "custom" && <p className="mt-2 text-[0.84rem] text-ink-3">Custom: you changed the access below.</p>}
 
-          <Step n={3} title="What they can open" sub="Hidden: not in their menu. View: can look, not change. Edit: can add and change." />
+          <Step n={firmsAll.length > 1 ? 4 : 3} title="What they can open" sub="Hidden: not in their menu. View: can look, not change. Edit: can add and change." />
           <ul className="divide-y divide-surface-2 overflow-hidden rounded-2xl bg-surface">
             {areas.map((a) => {
               const cur = level(perms, a.key);
@@ -270,7 +288,7 @@ function PersonForm({ ctx, person, areas, demo, onClose, onSaved, onRemoved, onD
           {person && <div className="mt-2"><Toggle on={active} onChange={setActive} label="Login switched on" hint="Switch off to block this person without removing them" /></div>}
         </>
       )}
-      {isOwnerRow && <div className="mt-4"><Note>You can change the owner’s name, mobile number and password here.</Note></div>}
+      {isOwnerRow && <div className="mt-4"><Note>You can change the owner’s name and sign-in email here.</Note></div>}
     </Drawer>
   );
 }

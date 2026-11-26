@@ -12,6 +12,7 @@ import { firmOf, kindLabel } from "@/lib/stone/firms";
 import type { AreaKey } from "@/lib/stone/perm";
 import { TallyPanel } from "./TallyView";
 import { Drawer } from "./ui";
+import { ImportBanner } from "./ImportData";
 import { navFor, type Ctx, type View } from "./StoneApp";
 import { Panel, KpiCard } from "@/components/Panels";
 import { ChartBody } from "@/components/Charts";
@@ -204,7 +205,7 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
         <div className="text-sm text-ink-3">{fullDate(new Date())} · {S.company}</div>
         <h2 className="mt-1 text-[1.65rem] font-semibold leading-tight tracking-tight">{hello}{ctx.me ? `, ${ctx.me.name.split(" ")[0]}` : ""}</h2>
         {empty ? (
-          <p className="mt-3 max-w-[65ch] text-ink-2">Your workspace is empty. Start by adding {see("parties") ? "your customers and suppliers" : "your first entries"}, or load the sample company from Settings to look around.</p>
+          <p className="mt-3 max-w-[65ch] text-ink-2">Your workspace is empty. Upload your existing data with the Excel template, start adding {see("parties") ? "your customers and suppliers" : "your first entries"}, or load the sample company to look around.</p>
         ) : (
           <p className="mt-3 max-w-[65ch] text-ink-2">{summary ? `${summary}.` : ""} {myAlerts.length ? `${myAlerts.length} things need you today.` : "Nothing needs you today."}</p>
         )}
@@ -312,6 +313,7 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
   const anyRecords = ctx.root.blocks.length + ctx.root.sales.length + ctx.root.parties.length > 0;
   return (
     <div className="space-y-4">
+      {ctx.edit("settings") && fewRecords && <ImportBanner ctx={ctx} />}
       {owner && fewRecords && (
         <div className="no-print flex flex-wrap items-center gap-4 rounded-[22px] bg-accent-soft p-5">
           <div className="min-w-[240px] flex-1">

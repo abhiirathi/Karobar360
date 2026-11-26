@@ -107,7 +107,7 @@ const GUIDES: Guide[] = [
   {
     key: "team", view: "team", title: "Team",
     what: "Logins for your staff, each seeing only what you allow.",
-    steps: ["Click Add person and enter the name and mobile no.", "Pick a role such as Gate, Yard and saw supervisor, Sales or Accountant, or choose Custom and set what they can see and change.", "Choose whether they can see costs and margins.", "Share the login on WhatsApp."],
+    steps: ["Click Add person and enter the name and email. If your group has a mine, a unit and a depot as separate firms, pick the firms they work in.", "Pick a role such as Gate, Yard and saw supervisor, Sales or Accountant, or choose Custom and set what they can see and change.", "Choose whether they can see costs and margins.", "Save. They get an invite email and sign in with Google or an email code, on the website or the installed app."],
   },
   {
     key: "settings", view: "settings", title: "Settings and firms",

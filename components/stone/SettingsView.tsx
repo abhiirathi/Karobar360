@@ -9,6 +9,7 @@ import FirmsSettings from "./Firms";
 import { jobSettings } from "@/lib/stone/jobwork";
 import type { JobSettings } from "@/lib/stone/types";
 import { WeighbridgeSettings } from "./Weigh";
+import { ImportButtons } from "./ImportData";
 
 export default function SettingsView({ ctx }: { ctx: Ctx }) {
   const { db, update, reset, replace } = ctx;
@@ -117,6 +118,11 @@ export default function SettingsView({ ctx }: { ctx: Ctx }) {
 
       <Section title="Your data">
         <Note>{ctx.mode === "demo" ? "This demo is saved only in this browser. Create a company account to share it with your team." : "Your company’s data is stored online and shared with your team, each person seeing only what you allow. Download a backup whenever you want a copy."}</Note>
+        <div className="mt-4 rounded-2xl bg-surface p-4">
+          <div className="font-medium">Import from Excel</div>
+          <p className="mt-0.5 text-[0.86rem] text-ink-2">Download the template, fill in blocks, slab stock, masters, invoices, stores, labour and quarry costs, then upload it. You see a preview first; uploading the same file again updates rows instead of copying them.</p>
+          <div className="mt-3 flex flex-wrap gap-2">{canEdit && <ImportButtons ctx={ctx} />}</div>
+        </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <button className="btn btn-quiet btn-sm" onClick={backup}>Download backup</button>
           {owner && <><label className="btn btn-quiet btn-sm">Restore backup<input type="file" accept="application/json" className="sr-only" onChange={(e) => restore(e.target.files?.[0])} /></label>
