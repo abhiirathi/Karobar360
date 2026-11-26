@@ -93,7 +93,7 @@ function FirmForm({ ctx, firm, onClose, used }: { ctx: Ctx; firm: Firm | null; o
       footer={<><button className="btn btn-primary" onClick={save}>Save</button><button className="btn btn-quiet" onClick={onClose}>Cancel</button>{err && <span className="text-sm text-neg">{err}</span>}{firm && firm.id !== first?.id && <button className="btn btn-quiet btn-sm ml-auto !text-neg" disabled={used} title={used ? "Move its blocks, lots and invoices to another firm first" : undefined} onClick={remove}>Remove</button>}</>}>
       <div className="text-sm font-medium">What this firm does</div>
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        {FIRM_KINDS.map((k) => (
+        {FIRM_KINDS.filter((k) => ["mine", "processing", "distribution"].includes(k.key) || k.key === f.kind).map((k) => (
           <button key={k.key} type="button" onClick={() => setF((x) => ({ ...x, kind: k.key as FirmKind, modules: kindModules(k.key) }))}
             className={`focusable rounded-xl border px-3 py-2 text-left transition-colors ${f.kind === k.key ? "border-accent bg-accent-soft" : "border-surface-2 hover:bg-surface-2"}`}>
             <div className="text-[0.92rem] font-medium">{k.label}</div>

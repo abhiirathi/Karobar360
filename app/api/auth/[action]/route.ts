@@ -7,8 +7,10 @@ import { sendMagicLink } from "@/lib/server/mail";
 import { sign } from "@/lib/server/sign";
 import { DEFAULT_SETTINGS } from "@/lib/stone/seed";
 import { presetModules } from "@/lib/stone/modules";
+import { kindModules } from "@/lib/stone/firms";
+import { uid } from "@/lib/stone/calc";
 import type { Me } from "@/lib/stone/perm";
-import type { Modules, StoneSettings } from "@/lib/stone/types";
+import type { Firm, Modules, StoneSettings } from "@/lib/stone/types";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +25,39 @@ export async function GET(_: Request, { params }: { params: Promise<{ action: st
   return json({ me: null, pending: pending ? { email: pending.email, name: pending.name } : null, google: !!(c.googleId && c.googleSecret), email: !!(c.smtpUser && c.smtpPass) || process.env.K360_LOCAL === "1" });
 }
 
-type Setup = { gstin?: string; address?: string; city?: string; state?: string; phone?: string; pincode?: string; invoicePrefix?: string; modules?: Partial<Modules> };
+type Biz = { kind: "mine" | "processing" | "distribution"; name: string; gstin: string };
+type Setup = { gstin?: string; address?: string; city?: string; state?: string; phone?: string; pincode?: string; invoicePrefix?: string; modules?: Partial<Modules>; businesses?: Biz[] };
+
+const FLOW = ["mine", "processing", "distribution"] as const;
+const initials = (name: string) => name.replace(/[^A-Za-z ]/g, "").split(/\s+/).filter(Boolean).map((w) => w[0]).join("").toUpperCase().slice(0, 4) || "INV";
+const prefixOf = (name: string) => `${initials(name)}/26-27/`;
+// Each firm numbers its own invoices; a short code per business keeps the series apart.
+const CODE = { mine: "MIN", processing: "MFG", distribution: "DST" } as const;
+
+/**
+ * The parent account and the businesses ticked at sign-up. One business: the account is that company.
+ * Two or three: each becomes a firm of the group (mine, manufacturing, distribution, in that order).
+ */
+function accountSettings(group: string, setup: Setup): StoneSettings {
+  const city = String(setup.city ?? "").slice(0, 60);
+  const state = String(setup.state ?? "08").slice(0, 2);
+  const phone = String(setup.phone ?? "").slice(0, 20);
+  const list = (Array.isArray(setup.businesses) ? setup.businesses : [])
+    .filter((b) => FLOW.includes(b?.kind))
+    .filter((b, i, a) => a.findIndex((x) => x.kind === b.kind) === i)
+    .sort((a, b) => FLOW.indexOf(a.kind) - FLOW.indexOf(b.kind))
+    .map((b) => ({ kind: b.kind, name: String(b.name ?? "").trim().slice(0, 80) || group, gstin: String(b.gstin ?? "").toUpperCase().replace(/\s/g, "").slice(0, 15) }));
+  if (!list.length) return settingsFor(group, setup, phone);
+  const base = settingsFor(group, { ...setup, modules: undefined }, phone);
+  if (list.length === 1) {
+    const b = list[0];
+    return { ...base, company: b.name, gstin: b.gstin, invoicePrefix: prefixOf(b.name), modules: kindModules(b.kind) };
+  }
+  const firms: Firm[] = list.map((b) => ({ id: uid(), name: b.name, kind: b.kind, gstin: b.gstin, address: "", city, state, pincode: "", phone, invoicePrefix: `${initials(group)}-${CODE[b.kind]}/26-27/`, modules: kindModules(b.kind) }));
+  const modules = presetModules({});
+  for (const f of firms) for (const k of Object.keys(modules) as (keyof Modules)[]) modules[k] = modules[k] || !!f.modules[k];
+  return { ...base, company: group, modules, firms };
+}
 
 function settingsFor(company: string, setup: Setup, phone: string): StoneSettings {
   return {
@@ -68,7 +102,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
       if (r.error === "login_taken") { await finishEmail(v); return json({ ok: true }); }
       if (r.error || !r.token || !r.user) return json({ error: "Could not create the company. Try again." }, 400);
       const setup = (body.setup ?? {}) as Setup;
-      await rpc("k_data_put_many", { p_org: r.user.orgId, p_user: r.user.id, p_items: [{ section: "settings", data: settingsFor(company, setup, String(setup.phone ?? "")), base: null }] });
+      await rpc("k_data_put_many", { p_org: r.user.orgId, p_user: r.user.id, p_items: [{ section: "settings", data: accountSettings(company, setup), base: null }] });
       await setSession(r.token);
       (await cookies()).delete(VERIFIED);
       return json({ me: r.user });
