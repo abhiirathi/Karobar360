@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { ArrowRight, ChevronDown, Factory, ReceiptText, ShoppingCart, Truck, Warehouse, Wallet } from "lucide-react";
 import type { Ctx, View } from "./StoneApp";
+import HowVideos from "@/components/HowVideos";
 
 type Guide = { key: string; view: View; sub?: string; title: string; what: string; steps: string[]; tip?: string };
 
@@ -147,7 +148,8 @@ export default function Help({ ctx }: { ctx: Ctx }) {
 
   return (
     <div className="max-w-[980px]">
-      <p className="max-w-[62ch] text-[1.02rem] text-ink-2">Karobar360 follows each block from the quarry to the customer’s invoice. Here is how a block moves through the tool, then a short guide to each section.</p>
+      <p className="max-w-[62ch] text-[1.02rem] text-ink-2">Karobar360 follows each block from the quarry to the customer’s invoice. Watch the videos, then see how a block moves through the tool and a short guide to each section.</p>
+      <div className="mt-6"><HowVideos /></div>
 
       {owner && (
         <div className="mt-6 flex flex-wrap items-center gap-4 rounded-[22px] bg-accent-soft p-5">

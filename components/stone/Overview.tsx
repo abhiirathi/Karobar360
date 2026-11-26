@@ -13,6 +13,7 @@ import type { AreaKey } from "@/lib/stone/perm";
 import { TallyPanel } from "./TallyView";
 import { Drawer } from "./ui";
 import { ImportBanner } from "./ImportData";
+import HowVideos, { type VideoKey } from "@/components/HowVideos";
 import { navFor, type Ctx, type View } from "./StoneApp";
 import { Panel, KpiCard } from "@/components/Panels";
 import { ChartBody } from "@/components/Charts";
@@ -331,9 +332,11 @@ export default function Overview({ ctx }: { ctx: Ctx }) {
           <button className="btn btn-quiet btn-sm" onClick={() => setCustom(true)}><SlidersHorizontal size={14} />Customise dashboard</button>
         </div>
       )}
+      {fewRecords && <HowItWorks ctx={ctx} />}
       {rows[0]}
       {ctx.firms.length > 1 && !ctx.firm && <FirmTable ctx={ctx} />}
       {rows.slice(1)}
+      {!fewRecords && <HowItWorks ctx={ctx} />}
       {custom && <Customise ctx={ctx} available={Object.keys(W_).filter((k) => W_[k] !== null)} kpis={kpiAll.filter((k) => k.ok)} onClose={() => setCustom(false)} />}
     </div>
   );
@@ -492,5 +495,27 @@ function CostBuild({ ctx }: { ctx: Ctx }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+/** The three walkthrough videos, limited to the businesses this company (or the selected firm) runs. */
+function HowItWorks({ ctx }: { ctx: Ctx }) {
+  const m = ctx.mods;
+  const only: VideoKey[] = [
+    ...(m.quarry ? ["mine" as const] : []),
+    ...(m.processing || m.buyBlocks ? ["manufacturing" as const] : []),
+    ...(m.depot || m.trading ? ["distribution" as const] : []),
+  ];
+  return (
+    <section className="no-print pt-2" aria-labelledby="how-title">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h3 id="how-title" className="text-lg font-semibold tracking-tight">How it works</h3>
+          <p className="text-[0.9rem] text-ink-2">Short Hindi videos that follow one block from the quarry to the customer’s invoice.</p>
+        </div>
+        <button className="text-sm font-medium text-accent underline-offset-4 hover:underline" onClick={() => ctx.go("help")}>Step-by-step guide</button>
+      </div>
+      <HowVideos only={only} />
+    </section>
   );
 }

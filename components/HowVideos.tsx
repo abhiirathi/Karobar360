@@ -10,11 +10,16 @@ const VIDEOS = [
   { key: "distribution", step: "3", label: "Distribution / depot", title: "Slab stock to the customer’s invoice", time: "4:57" },
 ] as const;
 
-export default function HowVideos() {
-  const [i, setI] = useState(0);
+export type VideoKey = (typeof VIDEOS)[number]["key"];
+
+/** `only` limits the chapters to the businesses a company runs; with none left, all three show. */
+export default function HowVideos({ only }: { only?: VideoKey[] } = {}) {
+  const list = only?.length ? VIDEOS.filter((x) => only.includes(x.key)) : VIDEOS;
+  const [pickI, setI] = useState(0);
   const [started, setStarted] = useState(false);
   const ref = useRef<HTMLVideoElement>(null);
-  const v = VIDEOS[i];
+  const i = Math.min(pickI, list.length - 1);
+  const v = list[i];
 
   // Switching chapters is a click, so the browser lets the new video start playing straight away.
   const pick = (n: number) => {
@@ -27,7 +32,7 @@ export default function HowVideos() {
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] lg:gap-10">
       <div className="flex min-w-0 flex-col">
         <div role="tablist" aria-label="Walkthrough videos" className="flex flex-col gap-1.5">
-          {VIDEOS.map((x, n) => (
+          {list.map((x, n) => (
             <button
               key={x.key}
               role="tab"
@@ -36,7 +41,7 @@ export default function HowVideos() {
               onClick={() => pick(n)}
               className={`focusable group flex min-h-[52px] w-full items-center gap-4 rounded-2xl px-4 py-3 text-left transition-[background-color,color,transform] active:scale-[0.99] ${n === i ? "bg-surface text-ink" : "text-ink-2 hover:bg-surface/60 hover:text-ink"}`}
             >
-              <span className={`num grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-semibold transition-colors ${n === i ? "bg-accent text-accent-ink" : "bg-surface-2 text-ink-2 group-hover:text-ink"}`}>{x.step}</span>
+              <span className={`num grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-semibold transition-colors ${n === i ? "bg-accent text-accent-ink" : "bg-surface-2 text-ink-2 group-hover:text-ink"}`}>{list.length === VIDEOS.length ? x.step : n + 1}</span>
               <span className="min-w-0 flex-1">
                 <span className="block font-semibold">{x.label}</span>
                 <span className="block text-sm text-ink-3">{x.title}</span>
@@ -59,7 +64,7 @@ export default function HowVideos() {
           preload={started ? "auto" : "none"}
           autoPlay={started}
           onPlay={() => setStarted(true)}
-          onEnded={() => { if (i < VIDEOS.length - 1) setI(i + 1); }}
+          onEnded={() => { if (i < list.length - 1) setI(i + 1); }}
           aria-label={`${v.label}: ${v.title}`}
         />
       </div>
