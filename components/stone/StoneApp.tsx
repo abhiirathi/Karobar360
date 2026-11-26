@@ -94,7 +94,7 @@ export function navFor(mods: Modules, can: (a: AreaKey) => Level, perms: Perms):
     { key: "team", label: "Team", icon: UserCog, show: perms.team },
     { key: "settings", label: "Settings", icon: Settings, show: v("settings") },
     { key: "services", label: "Website and services", icon: Globe, show: perms.team || can("settings") === "edit" },
-    { key: "pricing", label: "Plans and pricing", icon: IndianRupee, show: perms.team || can("settings") === "edit" },
+    { key: "pricing", label: "Pricing", icon: IndianRupee, show: perms.team || can("settings") === "edit" },
     { key: "help", label: "How to use", icon: LifeBuoy, show: true },
   ];
 }
