@@ -1,5 +1,7 @@
 import { rpc } from "@/lib/server/db";
-import { currentUser, json, normLogin, validLogin } from "@/lib/server/auth";
+import { randomBytes } from "node:crypto";
+import { currentUser, json, originOf, validEmail } from "@/lib/server/auth";
+import { sendInvite } from "@/lib/server/mail";
 import { clampPerms, permsOf, ROLES, type Me, type Perms } from "@/lib/stone/perm";
 
 export const dynamic = "force-dynamic";
@@ -24,13 +26,12 @@ export async function POST(req: Request) {
   if ("err" in g) return g.err;
   const { u, p } = g;
   const b = await req.json().catch(() => ({}));
-  const login = normLogin(b.login);
+  const login = String(b.login ?? "").trim().toLowerCase();
   const name = String(b.name ?? "").trim().slice(0, 60);
   if (!name) return json({ error: "Enter the person’s name." }, 400);
-  if (!validLogin(login)) return json({ error: "Use a 10-digit mobile number or a short username (letters and numbers)." }, 400);
-  const pass = b.password ? String(b.password) : null;
-  if (!b.id && (!pass || pass.length < 6)) return json({ error: "Set a password of at least 6 characters." }, 400);
-  if (pass && pass.length < 6) return json({ error: "Password needs at least 6 characters." }, 400);
+  if (!validEmail(login)) return json({ error: "Enter the person’s email address. They sign in with Google or an email link." }, 400);
+  // Sign-in is by email only; the stored password is random and never shown to anyone.
+  const pass = b.id ? null : randomBytes(18).toString("base64url");
 
   const users = await rpc<Me[]>("k_users_list", { p_org: u.me.orgId });
   const target = b.id ? users.find((x) => x.id === b.id) : null;
@@ -48,9 +49,12 @@ export async function POST(req: Request) {
     p_org: u.me.orgId, p_by: u.me.id, p_id: b.id ?? null, p_name: name, p_login: login, p_pass: pass,
     p_role: role, p_perms: perms, p_active: b.active !== false,
   });
-  if (r.error === "login_taken") return json({ error: "This mobile number or username is already used. Pick another." }, 400);
+  if (r.error === "login_taken") return json({ error: "This email already has a Karobar360 login, here or in another company." }, 400);
   if (r.error) return json({ error: "Could not save. Check the details and try again." }, 400);
-  return json({ user: r.user });
+  const invited = !b.id || (target && target.login !== login)
+    ? await sendInvite(login, { name, company: u.me.orgName, by: u.me.name, url: `${originOf(req)}/stone` })
+    : false;
+  return json({ user: r.user, invited });
 }
 
 export async function DELETE(req: Request) {

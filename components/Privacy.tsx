@@ -11,7 +11,7 @@ const STEP_MS = 5200;
 const STEPS = [
   { title: "Your firm, sealed off", text: "Each firm’s data is kept apart. No other business on Karobar360 can see your sales, stock or parties." },
   { title: "Each person sees their part", text: "Staff open only the sections you allow. Rates and costs stay hidden from anyone without that right." },
-  { title: "Passwords scrambled, logins guarded", text: "Passwords are stored scrambled, never as typed. Too many wrong tries locks the login." },
+  { title: "No passwords to steal", text: "Sign in with Google or a one-time code sent to your email. Codes are stored scrambled, expire in 20 minutes and stop after 5 wrong tries." },
   { title: "Sealed on the way", text: "Everything travels encrypted over HTTPS. The database opens only through our server’s secret key." },
   { title: "Never sold. Always yours.", text: "We never sell or share your data. Take all of it out, or have it deleted, whenever you ask." },
 ];
@@ -93,7 +93,7 @@ function SceneRoles({ t }: { t: number }) {
 
 const HEX = "0123456789abcdef";
 function SceneLogin({ t }: { t: number }) {
-  const typed = Math.min(8, Math.max(0, Math.floor((t - 200) / 120)));
+  const typed = Math.min(6, Math.max(0, Math.floor((t - 200) / 120)));
   const scrambling = t > 1400;
   // Same pseudo-random string each time for a given moment, so the scramble looks alive but settles.
   const seed = scrambling ? Math.floor(Math.min(t, 2400) / 70) : 0;
@@ -102,7 +102,7 @@ function SceneLogin({ t }: { t: number }) {
   return (
     <div className="flex h-full flex-col justify-center gap-4">
       <div className="rounded-xl bg-white/[0.06] px-4 py-3">
-        <div className="text-[0.78rem] text-white/60">Password</div>
+        <div className="text-[0.78rem] text-white/60">One-time code from email</div>
         <div className="num mt-1 h-7 font-mono text-lg tracking-[0.2em]">{"•".repeat(typed)}</div>
       </div>
       <div className={`rounded-xl px-4 py-3 ring-1 ${show(scrambling)}`} style={{ ["--tw-ring-color" as string]: GREEN }}>
@@ -113,7 +113,7 @@ function SceneLogin({ t }: { t: number }) {
         {[1, 2, 3].map((n) => (
           <span key={n} className={`grid size-6 place-items-center rounded-full transition-colors ${tries >= n ? "bg-[#f0776c] text-[#1a0806]" : "bg-white/10 text-white/40"}`}><X size={13} strokeWidth={3} /></span>
         ))}
-        <span className={`ml-1 ${tries >= 3 ? "text-white" : "text-white/60"}`}>{tries >= 3 ? "Wrong tries: login locked" : "Wrong password"}</span>
+        <span className={`ml-1 ${tries >= 3 ? "text-white" : "text-white/60"}`}>{tries >= 3 ? "Wrong tries: code locked" : "Wrong code"}</span>
       </div>
     </div>
   );

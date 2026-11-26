@@ -137,8 +137,12 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
   const firmKey = `k360-firm-${me?.orgId ?? mode}`;
   const [firmId, setFirmId] = useState<string | null>(null);
   useEffect(() => { try { setFirmId(localStorage.getItem(firmKey) || null); } catch {} }, [firmKey]);
-  const firms = orderedFirms(db?.settings);
-  const firm = firms.length > 1 ? firms.find((f) => f.id === firmId) ?? null : null;
+  // People limited to some firms of the group see only those; with one firm they stay inside it.
+  const allFirms = orderedFirms(db?.settings);
+  const myFirms = perms.firms?.length ? allFirms.filter((f) => perms.firms!.includes(f.id)) : allFirms;
+  const firms = allFirms;
+  const lockedFirm = allFirms.length > 1 && !!perms.firms?.length;
+  const firm = allFirms.length > 1 ? myFirms.find((f) => f.id === firmId) ?? (lockedFirm ? myFirms[0] ?? null : null) : null;
   const setFirm = (id: string | null) => { setFirmId(id); try { if (id) localStorage.setItem(firmKey, id); else localStorage.removeItem(firmKey); } catch {} };
   const vdb = useMemo(() => (db ? scope(db, firm?.id ?? null) : db), [db, firm?.id]);
   const mods = useMemo(() => modulesOf(vdb?.settings), [vdb?.settings]);
@@ -191,7 +195,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
         </div>
         {firms.length > 1 ? (
           <div className="px-3 pb-2 pt-1 lg:px-3 lg:pt-3">
-            <FirmSwitcher firms={firms} firm={firm} onPick={(id) => { setFirm(id); go("overview"); }} />
+            <FirmSwitcher firms={myFirms} firm={firm} allowAll={!lockedFirm} onPick={(id) => { setFirm(id); go("overview"); }} />
           </div>
         ) : (
           <div className="hidden px-5 pb-2 pt-3 lg:block">
@@ -300,7 +304,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
 export const blocksOn = hasBlocks;
 
 /** One control for the firm: shows where you are working, opens a short list to switch. */
-function FirmSwitcher({ firms, firm, onPick }: { firms: Firm[]; firm: Firm | null; onPick: (id: string | null) => void }) {
+function FirmSwitcher({ firms, firm, onPick, allowAll = true }: { firms: Firm[]; firm: Firm | null; onPick: (id: string | null) => void; allowAll?: boolean }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -311,7 +315,7 @@ function FirmSwitcher({ firms, firm, onPick }: { firms: Firm[]; firm: Firm | nul
     document.addEventListener("keydown", esc);
     return () => { document.removeEventListener("mousedown", off); document.removeEventListener("keydown", esc); };
   }, [open]);
-  const items: { id: string | null; name: string; sub: string }[] = [{ id: null, name: "All firms", sub: `Group view · ${firms.length} firms` }, ...firms.map((f) => ({ id: f.id, name: f.name, sub: kindLabel(f.kind) }))];
+  const items: { id: string | null; name: string; sub: string }[] = [...(allowAll ? [{ id: null, name: "All firms", sub: `Group view · ${firms.length} firms` }] : []), ...firms.map((f) => ({ id: f.id, name: f.name, sub: kindLabel(f.kind) }))];
   const cur = items.find((x) => x.id === (firm?.id ?? null)) ?? items[0];
   return (
     <div ref={box} className="relative">

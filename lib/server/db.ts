@@ -65,6 +65,22 @@ function local(fn: string, a: Record<string, unknown>): unknown {
       out = { token: sess(d, u), user: uj(d, u) };
       break;
     }
+    case "k_session_for": {
+      const u = d.users.find((x) => x.login === s("p_login").toLowerCase());
+      if (!u) { out = null; break; }
+      if (!u.active) { out = { error: "inactive" }; break; }
+      out = { token: sess(d, u), user: uj(d, u) };
+      break;
+    }
+    case "k_config_get": out = {}; break;
+    case "k_magic_put": { const m = ((d as unknown as { magic?: Record<string, { h: string; exp: number; tries: number }> }).magic ??= {}); m[s("p_email")] = { h: s("p_code_hash"), exp: Date.now() + 20 * 6e4, tries: 0 }; break; }
+    case "k_magic_check": {
+      const m = ((d as unknown as { magic?: Record<string, { h: string; exp: number; tries: number }> }).magic ??= {});
+      const x = m[s("p_email")];
+      if (!x || x.exp < Date.now() || x.tries >= 5) { out = false; break; }
+      if (x.h !== s("p_code_hash")) { x.tries++; out = false; break; }
+      delete m[s("p_email")]; out = true; break;
+    }
     case "k_me": {
       const x = d.sessions.find((t) => t.token === s("p_token") && t.exp > Date.now());
       const u = x && d.users.find((y) => y.id === x.user_id && y.active);
