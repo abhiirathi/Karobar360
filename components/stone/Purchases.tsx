@@ -6,6 +6,7 @@ import { nextBlockNo, qualities, qualityOf, split } from "@/lib/stone/costing";
 import { emptyBlock, emptyParty } from "@/lib/stone/seed";
 import type { Block, BlockStatus, Grade, ImportBill, Party, SlabLot, StoneType } from "@/lib/stone/types";
 import type { Ctx } from "./StoneApp";
+import { jwOutOn } from "@/lib/stone/modules";
 import { STATUS_LABEL } from "./BlockForm";
 import { godowns, whereIs } from "@/lib/stone/godowns";
 import { BuyForm } from "./Depot";
@@ -31,7 +32,7 @@ export function bills(blocks: Block[]): Bill[] {
 export default function Purchases({ ctx }: { ctx: Ctx }) {
   const { db } = ctx;
   const C = ctx.costs;
-  const blocksOk = ctx.can("blocks") !== "none" && (ctx.mods.buyBlocks || ctx.mods.imports || ctx.mods.processing);
+  const blocksOk = ctx.can("blocks") !== "none" && (ctx.mods.buyBlocks || ctx.mods.imports || ctx.mods.processing || jwOutOn(ctx.mods));
   const slabsOk = ctx.can("stock") !== "none" && (ctx.mods.trading || ctx.mods.depot);
   const allowed: Tab[] = [...(blocksOk ? (["domestic", "import"] as Tab[]) : []), ...(slabsOk ? (["slabs"] as Tab[]) : [])];
   // A dashboard shortcut sends "domestic:new" etc. to open the form straight away
