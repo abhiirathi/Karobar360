@@ -1,19 +1,20 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BookOpenCheck, Boxes, Building2, Check, ChevronDown, ChevronsUpDown, Globe, IndianRupee, LifeBuoy, Factory, ReceiptText, HardHat, LayoutDashboard, LogOut, Mountain, Package, Settings, ShoppingCart, UserCog, Users } from "lucide-react";
+import { BookOpenCheck, Boxes, Building2, Check, ChevronDown, ChevronsUpDown, Globe, IndianRupee, LifeBuoy, Factory, ReceiptText, HardHat, LayoutDashboard, LogOut, Mountain, Package, Scissors, Settings, ShoppingCart, UserCog, Users } from "lucide-react";
 import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import InstallApp from "@/components/InstallApp";
 import { useStone, type StoneMode } from "@/lib/stone/store";
 import { level, roleLabel, type AreaKey, type Level, type Me, type Perms } from "@/lib/stone/perm";
-import { hasBlocks, jobOnly, modulesOf } from "@/lib/stone/modules";
+import { hasBlocks, jobOnly, jwOutOn, modulesOf } from "@/lib/stone/modules";
 import type { Firm, Modules, PartyKind, StoneDB } from "@/lib/stone/types";
 import { kindLabel, orderedFirms, scope, tagNew } from "@/lib/stone/firms";
 import Overview from "./Overview";
 import Inventory from "./Inventory";
 import Unit from "./Unit";
 import JobWork from "./JobWork";
+import JobOut from "./JobOut";
 import Depot from "./Depot";
 import StoresView from "./Stores";
 import Labour from "./Labour";
@@ -29,7 +30,7 @@ import Services from "./Services";
 import GlobalSearch from "./Search";
 import Pricing from "@/components/Pricing";
 
-export type View = "overview" | "inventory" | "unit" | "stores" | "purchases" | "sales" | "parties" | "tally" | "team" | "settings" | "services" | "pricing" | "help" | "scan" | "labour";
+export type View = "overview" | "inventory" | "unit" | "jobout" | "stores" | "purchases" | "sales" | "parties" | "tally" | "team" | "settings" | "services" | "pricing" | "help" | "scan" | "labour";
 
 /** Sections that were merged into others; old links still land in the right place. */
 const MOVED: Record<string, [View, string]> = { mines: ["inventory", "blocks"], depot: ["inventory", "slabs"], trade: ["purchases", "import"], trace: ["inventory", "blocks"] };
@@ -67,7 +68,8 @@ export function masterKinds(mods: Modules): NavChild[] {
     { sub: "vendor", label: "Vendors", show: true },
     { sub: "transporter", label: "Transporters", show: true },
     { sub: "quality", label: "Quality", show: buys },
-    { sub: "godown", label: "Godowns", show: (mods.buyBlocks || mods.processing || mods.imports) && !jobOnly(mods) },
+    { sub: "godown", label: "Godowns", show: (mods.buyBlocks || mods.processing || mods.imports || jwOutOn(mods)) && !jobOnly(mods) },
+    { sub: "jobworker", label: "Job workers", show: jwOutOn(mods) },
     { sub: "mine", label: "Mines", show: mods.quarry },
   ];
 }
@@ -76,7 +78,7 @@ export function navFor(mods: Modules, can: (a: AreaKey) => Level, perms: Perms):
   const v = (a: AreaKey) => can(a) !== "none";
   const blocksOn = (hasBlocks(mods) && (v("blocks") || v("processing"))) || (mods.quarry && v("quarry"));
   const slabsOn = (mods.depot || mods.trading || mods.processing || mods.imports) && (v("stock") || v("processing") || v("sales"));
-  const buyOn = !jobOnly(mods) && (((mods.buyBlocks || mods.imports || mods.processing) && v("blocks")) || ((mods.trading || mods.depot) && v("stock")));
+  const buyOn = !jobOnly(mods) && (((mods.buyBlocks || mods.imports || mods.processing || jwOutOn(mods)) && v("blocks")) || ((mods.trading || mods.depot) && v("stock")));
   const floorOn = v("blocks") || v("processing");
   const jobOn = !!mods.jobwork && v("jobwork");
   // A unit that also does job work opens into its floor and its job orders
@@ -85,6 +87,7 @@ export function navFor(mods: Modules, can: (a: AreaKey) => Level, perms: Perms):
     { key: "overview", label: "Overview", icon: LayoutDashboard, show: true },
     { key: "inventory", label: "Inventory", icon: Boxes, show: (blocksOn || slabsOn) && !jobOnly(mods), children: [{ sub: "blocks", label: "Blocks", show: blocksOn }, { sub: "slabs", label: "Slabs", show: slabsOn }] },
     { key: "unit", label: "Manufacturing unit", icon: Factory, show: mods.processing && (floorOn || jobOn), children: unitKids },
+    { key: "jobout", label: "Job work", icon: Scissors, show: jwOutOn(mods) && v("blocks") && !jobOnly(mods) },
     { key: "stores", label: "Stores", icon: Package, show: mods.stores && v("stores") },
     { key: "labour", label: "Labour", icon: HardHat, show: v("labour") && (mods.processing || mods.quarry || mods.stores) },
     { key: "purchases", label: "Purchases", icon: ShoppingCart, show: buyOn },
@@ -280,6 +283,7 @@ export default function StoneApp({ mode, initialView, initialSub }: { mode: Ston
         {shown === "unit" && (childSub === "jobwork" ? <JobWork ctx={ctx} key={navN} /> : <Unit ctx={ctx} />)}
         {shown === "stores" && <StoresView ctx={ctx} />}
         {shown === "labour" && <Labour ctx={ctx} />}
+        {shown === "jobout" && <JobOut ctx={ctx} key={navN} />}
         {shown === "purchases" && <Purchases ctx={ctx} key={navN} />}
         {shown === "sales" && <Depot ctx={ctx} key={navN} />}
         {shown === "parties" && <Parties ctx={ctx} kind={(childSub || "customer") as PartyKind} key={childSub} />}

@@ -9,7 +9,7 @@ export type BlockStatus = "at_mine" | "godown" | "processing" | "processed" | "s
 export type Grade = "A" | "B" | "C" | "Commercial";
 export type RateBasis = "tonne" | "cbm";
 
-export type PartyKind = "customer" | "supplier" | "vendor" | "transporter" | "quality" | "mine" | "godown";
+export type PartyKind = "customer" | "supplier" | "vendor" | "transporter" | "quality" | "mine" | "godown" | "jobworker";
 
 /** A master record: customer, block supplier, vendor, transporter, stone quality or own mine. */
 export interface Party {
@@ -38,6 +38,8 @@ export interface Party {
   mines?: string[]; // block supplier's quarries
   leaseNo?: string; // own mine
   stoneType?: StoneType; // quality
+  jwBasis?: JwBasis; // job worker: how they usually charge
+  jwRate?: number; // job worker: usual rate, ₹
 }
 
 export interface Block {
@@ -87,6 +89,49 @@ export interface Block {
   trail?: Transfer[]; // moves between the group's firms, oldest first
   purchaseId?: string; // blocks entered together on one purchase bill
   imp?: ImportBill; // import purchase: BL, CIF and charges of the whole bill
+  jw?: BlockJobWork; // sent to an outside job worker for cutting (depot)
+}
+
+// ─── Job work out: the depot sends its own block to an outside cutter and gets slabs back ───
+// The block stays ours; the cutting charge and every cost of the job go into the cost of the slabs that come back.
+
+/** How the job worker charges: per sq ft of good slabs, per tonne of block, or a lump sum for the block. */
+export type JwBasis = "sqft" | "tonne" | "lump";
+
+/** One truck of slabs back from the job worker. Each trip becomes a lot in the depot. */
+export interface JwInward {
+  id: string;
+  date: string;
+  slabs: number; // good slabs
+  sqft: number; // good slabs, sq ft
+  thicknessMm: number;
+  finish: string;
+  grade: Grade;
+  broken: number; // broken pieces that came back
+  vehicleNo: string;
+  lotId: string; // lot made from this trip
+  note: string;
+}
+
+/** A cost of the job other than cutting: resin, polish, netting, freight back, loading. */
+export interface JwCost {
+  label: string;
+  amount: number; // ₹
+}
+
+export interface BlockJobWork {
+  workerId: string; // Masters → Job workers
+  sentOn: string;
+  vehicleNo: string;
+  freightOut: number; // ₹, depot to job worker
+  basis: JwBasis;
+  rate: number; // ₹ per sq ft, per tonne, or the lump sum
+  thicknessMm: number; // thickness asked for
+  finish: string;
+  costs: JwCost[];
+  inwards: JwInward[];
+  closedOn?: string; // all slabs received; the block is then processed
+  note: string;
 }
 
 export interface ImportCharge {
@@ -392,6 +437,7 @@ export interface Modules {
   trading: boolean; // buys slabs and resells
   depot: boolean; // sells slabs from a depot or showroom
   jobwork?: boolean; // cuts customers' own blocks for a charge
+  jwOut?: boolean; // sends its own blocks to an outside job worker; unset = on for a depot without its own unit
 }
 
 export interface TallySettings {

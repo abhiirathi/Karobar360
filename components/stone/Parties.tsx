@@ -10,8 +10,8 @@ import type { Ctx } from "./StoneApp";
 import { Area, Badge, Drawer, F, Grid, NumIn, Section, Sel, Seg, Table, TextIn, setUrlTab, type Col } from "./ui";
 
 const COUNTRIES = ["United Arab Emirates", "Saudi Arabia", "Qatar", "Oman", "Kuwait", "Bahrain", "Nepal", "Bangladesh", "Sri Lanka", "Maldives", "Mauritius", "United States", "United Kingdom", "Australia", "Canada", "Singapore", "Malaysia", "Vietnam", "Italy", "Turkey", "Greece", "Spain", "Egypt", "Kenya", "South Africa", "Brazil", "Portugal", "Iran", "China"];
-const LABEL: Record<PartyKind, string> = { customer: "Customers", supplier: "Suppliers", vendor: "Vendors", transporter: "Transporters", quality: "Quality", mine: "Mines", godown: "Godowns" };
-const ONE: Record<PartyKind, string> = { customer: "customer", supplier: "supplier", vendor: "vendor", transporter: "transporter", quality: "quality", mine: "mine", godown: "godown" };
+const LABEL: Record<PartyKind, string> = { customer: "Customers", supplier: "Suppliers", vendor: "Vendors", transporter: "Transporters", quality: "Quality", mine: "Mines", godown: "Godowns", jobworker: "Job workers" };
+const ONE: Record<PartyKind, string> = { customer: "customer", supplier: "supplier", vendor: "vendor", transporter: "transporter", quality: "quality", mine: "mine", godown: "godown", jobworker: "job worker" };
 const HINT: Record<PartyKind, string> = {
   customer: "Everyone you sell to, in India and abroad.",
   supplier: "Who you buy blocks from. Mark each one Domestic or Import; purchases follow it.",
@@ -20,6 +20,7 @@ const HINT: Record<PartyKind, string> = {
   quality: "Stone qualities you buy, cut and sell. Purchases pick from this list.",
   mine: "Your own quarries. Extracted blocks and extraction costs are entered against each one.",
   godown: "Where your blocks are kept. Every purchase puts its blocks in one of these.",
+  jobworker: "Outside units that cut your blocks into slabs. Their usual rate fills in when you send blocks.",
 };
 const STONES = ["marble", "granite", "sandstone", "quartzite", "onyx", "other"] as const;
 
@@ -32,6 +33,7 @@ function usedBy(db: StoneDB, p: Party) {
   const st = storesOf(db);
   return db.sales.some((s) => s.customerId === p.id || s.transporterId === p.id) || db.blocks.some((b) => b.supplierId === p.id || b.transporterId === p.id) || db.lots.some((l) => l.supplierId === p.id)
     || (db.jobwork ?? []).some((o) => o.customerId === p.id || o.dispatches.some((d) => d.transporterId === p.id))
+    || db.blocks.some((b) => b.jw?.workerId === p.id)
     || st.items.some((i) => i.vendorId === p.id) || st.moves.some((m) => m.supplierId === p.id) || db.mineCosts.some((c) => c.vendorId === p.id);
 }
 
@@ -86,6 +88,9 @@ export default function Parties({ ctx, kind }: { ctx: Ctx; kind: PartyKind }) {
     ] : kind === "supplier" ? [
       { key: "m", label: "Mines", render: (p: Party) => (p.intl ? <span className="text-ink-3">—</span> : p.mines?.length ? <span>{p.mines.join(", ")}</span> : <span className="text-ink-3">Not set</span>) },
       { key: "b", label: "Blocks bought", align: "right" as const, render: (p: Party) => String(bought(p)), sort: (p: Party) => bought(p) },
+    ] : kind === "jobworker" ? [
+      { key: "r", label: "Usual rate", align: "right" as const, render: (p: Party) => (p.jwRate ? `₹${p.jwRate} ${p.jwBasis === "tonne" ? "per tonne" : p.jwBasis === "lump" ? "per block" : "per sq ft"}` : <span className="text-ink-3">—</span>) },
+      { key: "o", label: "Blocks with them", align: "right" as const, render: (p: Party) => { const n = db.blocks.filter((b) => b.jw?.workerId === p.id && !b.jw.closedOn).length; return n ? String(n) : <span className="text-ink-3">—</span>; } },
     ] : kind === "vendor" ? [
       { key: "s", label: "Supplies", align: "right" as const, render: (p: Party) => { const n = supplies(p); return n ? String(n) : <span className="text-ink-3">—</span>; } },
     ] : []),
@@ -218,6 +223,14 @@ export function PartyForm({ initial, onSave, onDelete, onClose, inUse, can }: { 
           </div>
         )}
       </Section>
+      {p.kind === "jobworker" && (
+        <Section title="Usual charge">
+          <Grid>
+            <F label="Charges"><Sel value={p.jwBasis ?? "sqft"} onChange={(v) => set("jwBasis", v as Party["jwBasis"])} options={[{ v: "sqft", l: "Per sq ft of good slabs" }, { v: "tonne", l: "Per tonne of block" }, { v: "lump", l: "Lump sum per block" }]} /></F>
+            <F label="Rate" hint="Fills in when sending blocks; can be changed each time"><NumIn value={p.jwRate ?? 0} onChange={(v) => set("jwRate", v)} suffix="₹" /></F>
+          </Grid>
+        </Section>
+      )}
       {p.kind !== "transporter" && (
         <Section title={p.kind === "customer" ? "Credit" : "Payment"}>
           <Grid>

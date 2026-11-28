@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Building2, Plus } from "lucide-react";
 import { STATES, checkGstin, uid } from "@/lib/stone/calc";
 import { FIRM_KINDS, firmOf, firmsOf, kindLabel, kindModules } from "@/lib/stone/firms";
-import { MODULE_INFO, modulesOf } from "@/lib/stone/modules";
+import { MODULE_INFO, modOn, modulesOf } from "@/lib/stone/modules";
 import type { Firm, FirmKind } from "@/lib/stone/types";
 import type { Ctx } from "./StoneApp";
 import { Badge, Drawer, F, Grid, Note, Section, Sel, TextIn } from "./ui";
@@ -104,7 +104,7 @@ function FirmForm({ ctx, firm, onClose, used }: { ctx: Ctx; firm: Firm | null; o
       {f.kind === "other" && (
         <ul className="mt-3 divide-y divide-surface-2 rounded-2xl bg-surface">
           {MODULE_INFO.map((m) => (
-            <li key={m.key}><label className="flex cursor-pointer items-center gap-3 px-4 py-2 text-[0.9rem]"><input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={f.modules[m.key]} onChange={(e) => set("modules", { ...f.modules, [m.key]: e.target.checked })} />{m.label}</label></li>
+            <li key={m.key}><label className="flex cursor-pointer items-center gap-3 px-4 py-2 text-[0.9rem]"><input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={modOn(f.modules, m.key)} onChange={(e) => set("modules", { ...f.modules, [m.key]: e.target.checked })} />{m.label}</label></li>
           ))}
         </ul>
       )}

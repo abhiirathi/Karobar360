@@ -3,7 +3,7 @@ import { useState } from "react";
 import { PURGE_DEFAULT, STATES, checkGstin, purgePlan } from "@/lib/stone/calc";
 import type { StoneDB, StoneSettings } from "@/lib/stone/types";
 import type { Ctx } from "./StoneApp";
-import { MODULE_INFO, hasBlocks, modulesOf } from "@/lib/stone/modules";
+import { MODULE_INFO, hasBlocks, modOn, modulesOf } from "@/lib/stone/modules";
 import { F, Grid, Note, NumIn, Section, Sel, TextIn } from "./ui";
 import FirmsSettings from "./Firms";
 import { jobSettings } from "@/lib/stone/jobwork";
@@ -65,7 +65,7 @@ export default function SettingsView({ ctx }: { ctx: Ctx }) {
           {MODULE_INFO.map((m) => (
             <li key={m.key}>
               <label className="flex cursor-pointer items-start gap-3 px-4 py-2.5">
-                <input type="checkbox" className="mt-1 h-4 w-4 accent-[var(--accent)]" checked={M[m.key]} disabled={!canEdit} onChange={(e) => set("modules", { ...M, [m.key]: e.target.checked })} />
+                <input type="checkbox" className="mt-1 h-4 w-4 accent-[var(--accent)]" checked={modOn(M, m.key)} disabled={!canEdit} onChange={(e) => set("modules", { ...M, [m.key]: e.target.checked })} />
                 <span><span className="font-medium">{m.label}</span><span className="block text-[0.82rem] text-ink-3">{m.hint}</span></span>
               </label>
             </li>

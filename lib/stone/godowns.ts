@@ -18,7 +18,7 @@ export const inStock = (b: Block) => IN_STOCK.includes(b.status);
 export const godowns = (db: StoneDB) => db.parties.filter((p) => p.kind === "godown").map((p) => p.company).filter(Boolean);
 
 /** Where a block is, in a few words. */
-export const whereIs = (b: Block) => (b.status === "godown" ? b.godown || "Godown" : STATUS_LABEL[b.status] ?? b.status);
+export const whereIs = (b: Block) => (b.status === "godown" ? b.godown || "Godown" : b.status === "processing" && b.jw && !b.jw.closedOn ? "At job worker" : STATUS_LABEL[b.status] ?? b.status);
 
 // Statuses used before blocks moved to godown → processing → processed.
 const OLD: Record<string, BlockStatus> = { in_yard: "godown", in_transit: "godown", on_saw: "processing", sawn: "processed", rejected: "written_off" };

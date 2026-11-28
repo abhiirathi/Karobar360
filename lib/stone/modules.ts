@@ -7,6 +7,7 @@ export const MODULE_INFO: { key: keyof Modules; label: string; hint: string }[] 
   { key: "buyBlocks", label: "We buy blocks", hint: "From quarries and block traders: rate, royalty, freight, weighbridge" },
   { key: "processing", label: "We have a manufacturing unit", hint: "Gang saw, cutter or resin line: yield, cost per sq ft, damage" },
   { key: "jobwork", label: "We cut customers' blocks (job work)", hint: "Customer's own block in, slabs back, cutting charged per sq ft" },
+  { key: "jwOut", label: "We send our blocks to a job worker", hint: "Blocks cut outside: cutting charge, freight and extras go into the slab cost" },
   { key: "imports", label: "We import blocks or slabs", hint: "Italy, Turkey, Brazil, Greece, China: BL, landed cost, free days" },
   { key: "exports", label: "We export", hint: "Shipments out, shipping bill, containers" },
   { key: "trading", label: "We buy slabs to resell", hint: "Slab purchases from other units and importers" },
@@ -34,8 +35,14 @@ export function presetModules(m: Partial<Modules>): Modules {
 /** A unit that only cuts other people's blocks: no stock of its own to buy, hold or sell. */
 export const jobOnly = (m: Modules) => !!m.jobwork && !m.quarry && !m.buyBlocks && !m.imports && !m.trading && !m.depot;
 
-/** Rough blocks exist in the business (own, bought or imported). */
-export const hasBlocks = (m: Modules) => m.quarry || m.buyBlocks || m.processing || m.imports;
+/** Sends its own blocks to an outside job worker. Unset = on for a depot without its own unit, quarry or job work. */
+export const jwOutOn = (m: Modules) => m.jwOut ?? (!!m.depot && !m.processing && !m.jobwork && !m.quarry);
+
+/** A module switch as it stands, with the defaults of switches added later. */
+export const modOn = (m: Modules, k: keyof Modules) => (k === "jwOut" ? jwOutOn(m) : !!m[k]);
+
+/** Rough blocks exist in the business (own, bought, imported, or bought to send for job work). */
+export const hasBlocks = (m: Modules) => m.quarry || m.buyBlocks || m.processing || m.imports || jwOutOn(m);
 
 export const TALLY_DEFAULT: TallySettings = {
   company: "",

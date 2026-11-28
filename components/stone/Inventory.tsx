@@ -10,6 +10,7 @@ import { freeCount, freeSqft, reservations, reservedCount, reservedSqft } from "
 import type { Block, BlockStatus, MineCost, Reservation, SlabLot } from "@/lib/stone/types";
 import { ReserveForm, ReservedList } from "./Reserved";
 import type { Ctx } from "./StoneApp";
+import { jwOutOn } from "@/lib/stone/modules";
 import BlockForm, { STATUS_LABEL, type BlockMode } from "./BlockForm";
 import QrLabels from "./QrLabels";
 import TransferForm from "./Transfer";
@@ -103,7 +104,7 @@ function BlockInventory({ ctx }: { ctx: Ctx }) {
         {tabs.length > 1 && <Seg value={tab} onChange={setTab} tabs={[{ key: "blocks", label: "Blocks", count: db.blocks.length }, { key: "costs", label: "Extraction costs", count: db.mineCosts.length }, { key: "pertonne", label: "Cost per tonne" }]} />}
         {tab === "blocks" && <Seg value={status} onChange={setStatus} tabs={([
           { key: "stock", label: "In stock", count: stock.length },
-          ...(ctx.mods.processing ? [{ key: "processing", label: "Processing", count: count("processing") }, { key: "processed", label: "Processed", count: count("processed") }] : []),
+          ...(ctx.mods.processing || jwOutOn(ctx.mods) ? [{ key: "processing", label: jwOutOn(ctx.mods) && !ctx.mods.processing ? "At job worker" : "Processing", count: count("processing") }, { key: "processed", label: "Processed", count: count("processed") }] : []),
           { key: "sold", label: "Sold", count: count("sold") },
           { key: "all", label: "All", count: db.blocks.length },
         ] as { key: BStatus; label: string; count: number }[])} />}
